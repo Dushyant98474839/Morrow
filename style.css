@@ -1216,3 +1216,11 @@ input:focus,select:focus{border-color:var(--sage)}
   background:rgba(180,92,67,.12);
 }
 
+
+
+.library-subject-footer{
+  display:flex;
+  align-items:center;
+  margin-top:9px;
+  padding:2px 2px;
+}

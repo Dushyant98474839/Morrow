@@ -956,7 +956,10 @@ function renderLibrary(){
        </div>
       </div>
      </article>`;
-    }).join('') : `
+    }).join('') + `
+    <div class="library-subject-footer">
+     <button type="button" class="inline-add-btn" onclick="openAddWithSubject(this.dataset.subj)" data-subj="${escapeHtml(subject)}">＋ Add topic</button>
+    </div>` : `
     <div class="library-empty-card">
      <span>${arch.icon} ${escapeHtml(arch.label)} ready for its first seed.</span>
      <button type="button" class="inline-add-btn" onclick="openAddWithSubject(this.dataset.subj)" data-subj="${escapeHtml(subject)}">+ Topic</button>
