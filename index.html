@@ -267,7 +267,11 @@
           <span>🌱</span><span id="gardenDuePillLabel">Visit thirsty plant</span>
         </button>
 
-
+        <div class="garden-stack-controls" id="gardenStackControls" aria-label="Flip hill cards">
+          <button class="stack-step-btn" id="prevHillBtn" type="button" onclick="stepHillCard(-1)" title="Previous hill card" aria-label="Previous hill card">↑</button>
+          <span class="stack-step-label" id="stackStepLabel">1 / 6</span>
+          <button class="stack-step-btn" id="nextHillBtn" type="button" onclick="stepHillCard(1)" title="Next hill card" aria-label="Next hill card">↓</button>
+        </div>
 
         <div class="garden-specimen-card" id="gardenSpecimenCard" role="region" aria-label="Selected plant details">
           <div class="specimen-info">
