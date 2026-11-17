@@ -210,7 +210,7 @@
     </section>
 
     <section class="view" id="review">
-      <button class="back" onclick="showView('today')">← Later</button>
+      <button class="back" onclick="handleReviewBack()">← Later</button>
       <div class="review-wrap">
         <div class="bookmark" id="reviewBookmark">📖</div>
         <div class="eyebrow" id="reviewSubject">POLITY</div>
@@ -245,7 +245,7 @@
         <div class="garden-vignette"></div>
 
         <div class="garden-topbar">
-          <button class="garden-back" type="button" onclick="showView('today')" aria-label="Back to today">‹</button>
+          <button class="garden-back" type="button" onclick="handleGardenBack()" aria-label="Back to today">‹</button>
           <div>
             <div class="garden-kicker" id="gardenMissionLabel">A quiet place to grow</div>
             <h2>Your garden<span>.</span></h2>

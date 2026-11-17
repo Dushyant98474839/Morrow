@@ -581,6 +581,7 @@ function toggleMissionSwitcher(){
 }
 
 function openMissionSwitcher(){
+ pushModalHistory('arc');
  stopArcAnimation();
  syncArcAnchor();
  const entries=getArcEntries();
@@ -1030,7 +1031,34 @@ function row(t,all=false){
  return `<button class="topic" onclick="openTopic(${t.id})"><span class="dot ${t.graduated?'gold':t.paused?'blue':state==='dead'?'clay':t.tone||''}"></span><span class="topic-name">${escapeHtml(t.name)}<span class="topic-sub">${escapeHtml(t.subject)}${suffix}</span></span><span class="chev">›</span></button>`
 }
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function showView(id,btn){
+function currentViewId(){
+ return document.querySelector('.view.active')?.id || 'today';
+}
+
+function handleReviewBack(){
+ if(history.state && history.state.view === 'review'){
+  history.back();
+ } else {
+  showView('today');
+ }
+}
+
+function handleGardenBack(){
+ if(history.state && history.state.view === 'garden'){
+  history.back();
+ } else {
+  showView('today');
+ }
+}
+
+function showView(id,btn,push=true){
+ const prevView=currentViewId();
+ if(push && id!==prevView){
+  try {
+   if(id==='today') history.pushState({view:'today',trap:true},'');
+   else history.pushState({view:id},'');
+  } catch(e){}
+ }
  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
  const targetView=document.getElementById(id);
  if(targetView) targetView.classList.add('active');
@@ -1045,7 +1073,10 @@ function showView(id,btn){
  const titles={today:'Good morning.',add:'Leave it here.',garden:'Your garden.',library:'All topics.',progress:'Look how far.'};
  if(id==='today')document.getElementById('pageTitle').textContent=titles[id]||'';
 }
-function openTopic(id){currentId=id;let t=topics.find(x=>x.id===id);if(!t)return;
+function openTopic(id,push=true){currentId=id;let t=topics.find(x=>x.id===id);if(!t)return;
+ if(push){
+  try { history.pushState({view:'review',topicId:id},''); } catch(e){}
+ }
  document.getElementById('reviewTitle').textContent=t.name;document.getElementById('reviewSubject').textContent=t.subject.toUpperCase();
  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById('review').classList.add('active');
  document.querySelectorAll('.nav').forEach(n=>n.classList.remove('active'));
@@ -1133,6 +1164,7 @@ function openReplantModal(id){
  const backdrop = document.getElementById('replantModalBackdrop');
  if(modal) modal.classList.add('open');
  if(backdrop) backdrop.classList.add('open');
+ pushModalHistory('modal');
 }
 
 function closeReplantModal(){
@@ -1198,6 +1230,7 @@ function promptDeleteSubject(subject){
  const backdrop = document.getElementById('subjectDeleteBackdrop');
  if(modal) modal.classList.add('open');
  if(backdrop) backdrop.classList.add('open');
+ pushModalHistory('modal');
 }
 
 function closeSubjectDeleteModal(){
@@ -1242,6 +1275,7 @@ function promptDeleteTopic(id){
  const backdrop = document.getElementById('topicDeleteBackdrop');
  if(modal) modal.classList.add('open');
  if(backdrop) backdrop.classList.add('open');
+ pushModalHistory('modal');
 }
 
 function closeTopicDeleteModal(){
@@ -1286,3 +1320,84 @@ render();
 const now = new Date();
 document.getElementById('dateLabel').textContent =
   now.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});
+
+
+/* Mobile Native Back Button Navigation & History Routing */
+let backExitAllowed = false;
+let backToastTimer = null;
+
+function pushModalHistory(type){
+ try {
+  history.pushState({ modal: type, view: currentViewId() }, '');
+ } catch(e){}
+}
+
+function hasAnyModalOpen(){
+ return !!(
+  document.getElementById('replantModal')?.classList.contains('open') ||
+  document.getElementById('topicDeleteModal')?.classList.contains('open') ||
+  document.getElementById('subjectDeleteModal')?.classList.contains('open') ||
+  document.getElementById('subjectCreateModal')?.classList.contains('open') ||
+  document.getElementById('missionCreateModal')?.classList.contains('open') ||
+  document.getElementById('missionDeleteModal')?.classList.contains('open') ||
+  (typeof arcOpen !== 'undefined' && arcOpen)
+ );
+}
+
+function closeAllModals(){
+ if(typeof closeReplantModal === 'function') closeReplantModal();
+ if(typeof closeTopicDeleteModal === 'function') closeTopicDeleteModal();
+ if(typeof closeSubjectDeleteModal === 'function') closeSubjectDeleteModal();
+ if(typeof closeSubjectModal === 'function') closeSubjectModal();
+ if(typeof closeDeleteMissionModal === 'function') closeDeleteMissionModal();
+ if(typeof toggleCreateMission === 'function') toggleCreateMission(false);
+ if(typeof closeMissionSwitcher === 'function') closeMissionSwitcher();
+}
+
+window.addEventListener('popstate', (e) => {
+ // 1. If any modal or arc switcher is open, close it first without navigating away
+ if(hasAnyModalOpen()){
+  closeAllModals();
+  return;
+ }
+
+ const currentV = currentViewId();
+
+ // 2. If a specific target view/topic was stored in history state
+ if(e.state && e.state.view){
+  if(e.state.view === 'review' && e.state.topicId){
+   openTopic(e.state.topicId, false);
+  } else {
+   showView(e.state.view, null, false);
+  }
+  return;
+ }
+
+ // 3. Root navigation handling:
+ if(currentV !== 'today'){
+  showView('today', null, false);
+  try {
+   history.pushState({ view: 'today', trap: true }, '');
+  } catch(err){}
+ } else {
+  // If user is already on the main 'today' screen:
+  if(backExitAllowed){
+   window.history.back();
+  } else {
+   backExitAllowed = true;
+   toast('Press back again to exit ✿');
+   try {
+    history.pushState({ view: 'today', trap: true }, '');
+   } catch(err){}
+   clearTimeout(backToastTimer);
+   backToastTimer = setTimeout(() => {
+    backExitAllowed = false;
+   }, 2200);
+  }
+ }
+});
+
+try {
+ history.replaceState({ view: 'today', root: true }, '');
+ history.pushState({ view: 'today', trap: true }, '');
+} catch(e){}
