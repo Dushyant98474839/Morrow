@@ -961,13 +961,7 @@ function renderLibrary(){
      <span>${arch.icon} ${escapeHtml(arch.label)} ready for its first seed.</span>
      <button type="button" class="inline-add-btn" onclick="openAddWithSubject(this.dataset.subj)" data-subj="${escapeHtml(subject)}">+ Topic</button>
     </div>`}
-    <div class="library-subject-footer">
-     <button type="button" class="inline-add-btn" onclick="openAddWithSubject(this.dataset.subj)" data-subj="${escapeHtml(subject)}">＋ Add topic</button>
-     <button type="button" class="lib-del-subject-footer-btn" onclick="promptDeleteSubject(this.dataset.subj)" data-subj="${escapeHtml(subject)}">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11"/><path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"/><path d="M4 4.5l.8 9.2A1.5 1.5 0 0 0 6.3 15h3.4a1.5 1.5 0 0 0 1.5-1.3l.8-9.2"/><path d="M6.8 7.5v4.5"/><path d="M9.2 7.5v4.5"/></svg>
-      Delete subject
-     </button>
-    </div>
+
    </div>
   </section>`;
  }).join('');
