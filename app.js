@@ -450,7 +450,7 @@ function renderMissionList(){
    <span class="m-icon">${escapeHtml(item.icon)}</span>
    <span class="m-name">${escapeHtml(item.name)}</span>
    ${item.active?'<span class="m-check">●</span>':''}
-   ${item.type==='mission' && canDelete ? `<span class="m-del" role="button" tabindex="0" title="Delete ${escapeHtml(item.name)}" aria-label="Delete ${escapeHtml(item.name)}" data-del-id="${item.id}">🗑</span>` : ''}
+   ${item.type==='mission' && canDelete ? `<span class="m-del" role="button" tabindex="0" title="Delete ${escapeHtml(item.name)}" aria-label="Delete ${escapeHtml(item.name)}" data-del-id="${item.id}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11"/><path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"/><path d="M4 4.5l.8 9.2A1.5 1.5 0 0 0 6.3 15h3.4a1.5 1.5 0 0 0 1.5-1.3l.8-9.2"/><path d="M6.8 7.5v4.5"/><path d="M9.2 7.5v4.5"/></svg></span>` : ''}
   </div>
  `).join('');
 
@@ -921,7 +921,7 @@ function renderLibrary(){
     <span>${escapeHtml(subject)}</span>
     <span class="library-empty-subject">${items.length} ${items.length===1?'topic':'topics'}</span>
     ${expanded ? `
-     <span class="lib-del-subject-icon-btn" role="button" tabindex="0" title="Delete subject ${escapeHtml(subject)}" aria-label="Delete subject ${escapeHtml(subject)}" onclick="event.stopPropagation();promptDeleteSubject(this.dataset.subj)" data-subj="${escapeHtml(subject)}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11"/><path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"/><path d="M4 4.5l.8 9.2A1.5 1.5 0 0 0 6.3 15h3.4a1.5 1.5 0 0 0 1.5-1.3l.8-9.2"/><path d="M6.8 7.5v4.5"/><path d="M9.2 7.5v4.5"/></svg></span>
+     <button type="button" class="lib-del-icon-btn lib-del-subject-btn" title="Delete subject ${escapeHtml(subject)}" aria-label="Delete subject ${escapeHtml(subject)}" onclick="event.stopPropagation();promptDeleteSubject(this.dataset.subj)" data-subj="${escapeHtml(subject)}"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11"/><path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"/><path d="M4 4.5l.8 9.2A1.5 1.5 0 0 0 6.3 15h3.4a1.5 1.5 0 0 0 1.5-1.3l.8-9.2"/><path d="M6.8 7.5v4.5"/><path d="M9.2 7.5v4.5"/></svg></button>
     ` : ''}
     <span class="library-subject-chevron">›</span>
    </button>
@@ -940,7 +940,7 @@ function renderLibrary(){
        <div class="library-dates">
         <div class="library-date"><label>Last revised</label><span>${displayDate(t.lastReviewed)}</span></div>
         ${!t.graduated ? `
-        <div class="library-date"><label>Next revision · changeable</label>
+        <div class="library-date"><label>Next revision</label>
          <input aria-label="Next revision date for ${escapeHtml(t.name)}" type="date" min="${dateValue(todayStart())}" value="${dateValue(t.dueAt)}" onchange="changeNextDate(${t.id},this.value)">
         </div>` : ''}
        </div>

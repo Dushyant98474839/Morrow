@@ -1033,7 +1033,6 @@ input:focus,select:focus{border-color:var(--sage)}
   border-style:dashed;
 }
 .lib-del-icon-btn{
-  margin-left:auto;
   border:0;
   background:transparent;
   padding:4px;
@@ -1049,6 +1048,13 @@ input:focus,select:focus{border-color:var(--sage)}
   opacity:1;
   color:#c56b52;
   transform:scale(1.15) rotate(-4deg);
+}
+.library-topic-actions .lib-del-icon-btn{
+  margin-left:auto;
+}
+.lib-del-subject-btn{
+  margin-left:6px;
+  margin-right:2px;
 }
 
 /* Topic Delete Confirmation Modal */
@@ -1194,27 +1200,7 @@ input:focus,select:focus{border-color:var(--sage)}
   border-color:var(--sage-dark);
 }
 
-/* Subject Delete Buttons & Footer */
-.lib-del-subject-icon-btn{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  width:26px;
-  height:26px;
-  border-radius:8px;
-  color:#b45c43;
-  background:transparent;
-  border:none;
-  cursor:pointer;
-  opacity:.75;
-  transition:opacity .15s ease,background .15s ease;
-  margin-left:6px;
-  margin-right:2px;
-}
-.lib-del-subject-icon-btn:hover{
-  opacity:1;
-  background:rgba(180,92,67,.12);
-}
+
 
 
 
