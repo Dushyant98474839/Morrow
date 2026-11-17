@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#f5f1e8" />
+<title>Morrow — gentle revision</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="mission-backdrop" id="missionBackdrop" onclick="if(event.target===this)closeMissionSwitcher()">
+  <div class="mission-arc-shell" id="missionArcShell" aria-label="Mission switcher">
+    <div class="mission-arc-track"></div>
+    <div class="mission-arc-wheel" id="missionArcWheel" role="listbox" aria-label="Missions"></div>
+    <div class="mission-arc-hint" id="missionArcHint">drag or scroll along the arc</div>
+  </div>
+</div>
+
+<!-- Add Subject & Biome Modal -->
+<div class="subject-modal-backdrop" id="subjectModalBackdrop" onclick="closeSubjectModal()"></div>
+<div class="subject-create-modal" id="subjectCreateModal" role="dialog" aria-modal="true" aria-labelledby="createSubjectTitle">
+  <div class="mission-head">
+    <div>
+      <div class="eyebrow">New hill garden</div>
+      <h3 id="createSubjectTitle">Add a Subject.</h3>
+    </div>
+    <button class="mission-close" type="button" aria-label="Close" onclick="closeSubjectModal()">✕</button>
+  </div>
+  <form id="subjectCreateForm" onsubmit="submitNewSubject(event)">
+    <label for="newSubjectNameInput" style="margin-top:6px">Subject name</label>
+    <input id="newSubjectNameInput" placeholder="e.g. Astrophysics or Art History" maxlength="36" autocomplete="off" />
+    <label style="margin-top:14px">Hill garden ecosystem</label>
+    <div class="biome-picker-grid" id="biomePickerGrid" role="radiogroup" aria-label="Choose biome ecosystem"></div>
+    <div class="mission-create-actions">
+      <button type="button" onclick="closeSubjectModal()">Cancel</button>
+      <button type="submit" class="save-m">Plant hill</button>
+    </div>
+  </form>
+</div>
+
+<div class="mission-create-modal" id="missionCreateModal" role="dialog" aria-modal="true" aria-labelledby="createMissionTitle">
+  <div class="mission-head">
+    <div>
+      <div class="eyebrow">New space</div>
+      <h3 id="createMissionTitle">Create a Mission.</h3>
+    </div>
+    <button class="mission-close" type="button" aria-label="Close" onclick="toggleCreateMission(false)">✕</button>
+  </div>
+  <form id="missionCreateForm" onsubmit="createNewMission(event)">
+    <div class="mission-create-row">
+      <input id="newMissionIcon" value="🌱" maxlength="4" aria-label="Mission icon" style="text-align:center" />
+      <input id="newMissionName" placeholder="e.g. Spanish Fluency" maxlength="40" aria-label="Mission name" />
+    </div>
+    <div style="margin-top:8px">
+      <input id="newMissionSubjects" placeholder="Subjects (comma-separated, optional)" maxlength="140" aria-label="Subjects" style="padding:11px 12px;font-size:13px" />
+    </div>
+    <div class="mission-create-actions">
+      <button type="button" onclick="toggleCreateMission(false)">Cancel</button>
+      <button type="submit" class="save-m">Create</button>
+    </div>
+  </form>
+</div>
+
+<div class="mission-delete-modal" id="missionDeleteModal" role="alertdialog" aria-modal="true" aria-labelledby="deleteMissionTitle">
+  <div class="mission-head">
+    <div>
+      <div class="eyebrow" style="color:#b45c43">Permanent action</div>
+      <h3 id="deleteMissionTitle">Delete this mission?</h3>
+    </div>
+    <button class="mission-close" type="button" aria-label="Close" onclick="closeDeleteMissionModal()">✕</button>
+  </div>
+  <div class="delete-warning-box">
+    <strong id="deleteMissionTargetName">⚠️ Warning: This cannot be undone.</strong>
+    Deleting this mission will permanently erase all its topics, spaced-repetition schedules, revision history, and its growing hills.
+    <div class="delete-warning-stats" id="deleteMissionStats"></div>
+  </div>
+  <label class="delete-confirm-label" for="deleteConfirmInput">Type <span id="deleteMissionPromptName" style="color:#8f3d28"></span> to confirm</label>
+  <input class="delete-confirm-input" id="deleteConfirmInput" placeholder="Enter mission name" autocomplete="off" oninput="validateDeleteConfirm()" />
+  <div class="mission-create-actions">
+    <button type="button" onclick="closeDeleteMissionModal()">Keep mission</button>
+    <button type="button" class="danger-m" id="confirmDeleteMissionBtn" disabled onclick="executeDeleteMission()">Delete forever</button>
+  </div>
+</div>
+
+<!-- Re-plant Topic Modal -->
+<div class="replant-modal-backdrop" id="replantModalBackdrop" onclick="closeReplantModal()"></div>
+<div class="replant-modal" id="replantModal" role="dialog" aria-modal="true" aria-labelledby="replantModalTitle">
+  <div class="mission-head">
+    <div>
+      <div class="eyebrow" style="color:var(--sage-dark)">Fresh start</div>
+      <h3 id="replantModalTitle" style="font:500 20px/1.2 'Fraunces',serif;margin:4px 0 0">Re-plant topic</h3>
+    </div>
+    <button class="mission-close" type="button" aria-label="Close" onclick="closeReplantModal()">✕</button>
+  </div>
+  <p style="font-size:13px;color:var(--muted);margin:10px 0 14px;line-height:1.45">
+    Choose a starting growth stage for <strong id="replantTopicPromptName" style="color:var(--ink)"></strong>:
+  </p>
+  <label for="replantLevelSelect" style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px">Growth stage & timing</label>
+  <select id="replantLevelSelect" style="width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:14px;background:#fff;font-size:13.5px;color:var(--ink);margin-bottom:6px;outline:none">
+    <option value="seed" selected>🌱 Seed · revisit tomorrow (+1d)</option>
+    <option value="sprout">🌿 Sprout · revisit in 3 days (+3d)</option>
+    <option value="sapling">🌳 Sapling · revisit in 7 days (+7d)</option>
+    <option value="budding">🌸 Budding · revisit in 15 days (+15d)</option>
+    <option value="evergreen">🏔 Evergreen · revisit in 30 days (+30d)</option>
+  </select>
+  <div class="mission-create-actions">
+    <button type="button" onclick="closeReplantModal()">Cancel</button>
+    <button type="button" class="save-m" style="background:var(--sage-dark);color:#fff;border-color:var(--sage-dark)" onclick="confirmReplantTopic()">Plant anew</button>
+  </div>
+</div>
+
+<!-- Delete Topic Confirmation Modal -->
+<div class="topic-delete-backdrop" id="topicDeleteBackdrop" onclick="closeTopicDeleteModal()"></div>
+<div class="topic-delete-modal" id="topicDeleteModal" role="dialog" aria-modal="true" aria-labelledby="topicDeleteTitle">
+  <div class="mission-head">
+    <div>
+      <div class="eyebrow" style="color:#b45c43">Delete topic</div>
+      <h3 id="topicDeleteTitle" style="font:500 20px/1.2 'Fraunces',serif;margin:4px 0 0">Remove from library?</h3>
+    </div>
+    <button class="mission-close" type="button" aria-label="Close" onclick="closeTopicDeleteModal()">✕</button>
+  </div>
+  <p id="topicDeleteMessage" style="font-size:13px;color:var(--muted);margin:12px 0 16px;line-height:1.45">
+    Permanently delete this topic? Its revision history and hill garden plant will be removed.
+  </p>
+  <div class="mission-create-actions">
+    <button type="button" onclick="closeTopicDeleteModal()">Keep topic</button>
+    <button type="button" class="danger-m" onclick="confirmDeleteTopic()">Delete topic</button>
+  </div>
+</div>
+
+<div class="phone">
+  <div class="botanical botanical-top" aria-hidden="true">
+    <svg viewBox="0 0 220 190" role="presentation">
+      <path d="M8 180 C55 140 38 90 92 12 M48 143 C20 126 12 103 18 83 C42 91 55 112 48 143 M58 111 C85 112 105 97 111 75 C84 73 65 88 58 111 M79 72 C53 57 49 36 58 18 C81 34 89 52 79 72 M95 35 C119 41 139 31 149 10 C124 4 104 14 95 35" />
+      <path d="M8 180 C55 140 38 90 92 12" class="stem"/>
+    </svg>
+  </div>
+  <div class="botanical botanical-bottom" aria-hidden="true">
+    <svg viewBox="0 0 180 140" role="presentation">
+      <path d="M12 130 C45 100 60 75 82 15 M48 91 C23 84 12 66 14 48 C38 52 51 67 48 91 M67 62 C91 65 108 51 112 31 C88 28 72 41 67 62 M84 24 C65 11 64 -3 73 -17 C91 -2 96 10 84 24" />
+      <path d="M12 130 C45 100 60 75 82 15" class="stem"/>
+    </svg>
+    <span class="flower f1">✿</span><span class="flower f2">✽</span>
+  </div>
+  <span class="petal petal-one" aria-hidden="true"></span>
+  <span class="petal petal-two" aria-hidden="true"></span>
+  <span class="petal petal-three" aria-hidden="true"></span>
+  <div class="status"><span>9:41</span><span>● ● ▰</span></div>
+  <header class="top">
+    <div><div class="eyebrow" id="dateLabel">A little space to return</div><h1 id="pageTitle">Good morning.</h1></div>
+    <button class="icon-btn" title="Add a topic or subject" onclick="showView('add')">＋</button>
+  </header>
+  <main>
+    <section class="view active" id="today">
+      <div class="summary">
+        <div><div class="count" id="dueCount">5</div><div class="count-label">to revisit</div></div>
+        <button class="play" aria-label="Start revising" onclick="startReview()">▶</button>
+      </div>
+      <div class="section-head"><span>Today</span><small id="timeEstimate">A gentle little list</small></div>
+      <div class="list" id="topicList"></div>
+      <div class="footer-note">one topic at a time ✳</div>
+    </section>
+
+    <section class="view" id="add">
+      <button class="back" onclick="showView('today')">← Back</button>
+      <div class="eyebrow">A new thing to remember</div>
+      <h1 style="font-size:31px;margin-bottom:20px">Leave it here.</h1>
+      <div class="add-card">
+        <label for="topicInput">Topic</label>
+        <input id="topicInput" placeholder="e.g. Fundamental Rights" maxlength="70" />
+        <div class="label-row">
+          <label for="subjectInput">Subject</label>
+          <button type="button" class="inline-add-btn" onclick="openSubjectModal('add')">＋ New subject</button>
+        </div>
+        <select id="subjectInput" onchange="handleSubjectSelectChange(this)">
+          <option>Polity</option><option>History</option><option>Economy</option><option>Geography</option><option>Environment</option><option>Science</option><option>Other</option>
+        </select>
+        <label for="levelInput">Growth stage</label>
+        <select id="levelInput">
+          
+          <option value="seed" selected>🌱 revisit tomorrow</option>
+          <option value="sprout">🌿 revisit in 3 days</option>
+          <option value="sapling">🌳 revisit in 7 days</option>
+          <option value="budding">🌸 revisit in 15 days</option>
+          <option value="evergreen">🏔 revisit in 30 days</option>
+        </select>
+        <button class="primary" onclick="addTopic()">Add topic</button>
+      </div>
+      <div class="footer-note">you take care of the learning.</div>
+    </section>
+
+    <section class="view" id="review">
+      <button class="back" onclick="showView('today')">← Later</button>
+      <div class="review-wrap">
+        <div class="bookmark" id="reviewBookmark">📖</div>
+        <div class="eyebrow" id="reviewSubject">POLITY</div>
+        <h2 class="review-title" id="reviewTitle">Fundamental Rights</h2>
+        <div class="rule"></div>
+        <div id="reviewRatingSection">
+          <div class="eyebrow" style="margin-bottom:15px">How did it feel?</div>
+          <div class="ratings">
+            <button class="rate good" onclick="rateTopic('remembered')"><span class="face">☺</span><small>Easy</small></button>
+            <button class="rate mid" onclick="rateTopic('difficult')"><span class="face">◡</span><small>Hard</small></button>
+            <button class="rate bad" onclick="rateTopic('forgot')"><span class="face">☹</span><small>Forgot</small></button>
+          </div>
+          <div id="reviewGraduateBox" style="display:none;margin-top:22px;padding-top:18px;border-top:1px dashed var(--line)">
+            <button type="button" class="primary" style="background:#5c7857;margin-top:0" onclick="graduateTopic(currentId)">🎓 Graduate to Full Bloom</button>
+            <small style="display:block;margin-top:7px;color:var(--muted);font-size:11px">2 monthly revisions completed · Ready for permanent mastery</small>
+          </div>
+        </div>
+        <div id="reviewMasteredSection" style="display:none;margin-top:10px">
+          <div style="font-size:38px;margin-bottom:12px">🏆</div>
+          <div style="font:500 21px/1.2 'Fraunces',serif;color:#856417;margin-bottom:8px">Mastered & Graduated</div>
+          <p style="font-size:13px;color:var(--muted);max-width:280px;margin:0 auto 20px;line-height:1.5">
+            This topic completed its full revision cycle and achieved permanent bloom. The revision loop is closed.
+          </p>
+          <button type="button" class="primary" style="background:var(--sage);margin-top:0" onclick="openReplantModal(currentId)">🌱 Re-plant in Garden to Resume Revising</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="garden">
+      <div class="garden-scene" id="gardenScene">
+        <canvas id="gardenMasterCanvas" aria-label="Interactive cascading hill gardens stacked like cards"></canvas>
+        <div class="garden-vignette"></div>
+
+        <div class="garden-topbar">
+          <button class="garden-back" type="button" onclick="showView('today')" aria-label="Back to today">‹</button>
+          <div>
+            <div class="garden-kicker" id="gardenMissionLabel">A quiet place to grow</div>
+            <h2>Your garden<span>.</span></h2>
+            <div class="garden-mood-line"><span class="garden-mood-dot" id="gardenStatusDot"></span><span id="gardenMood">Growing gently</span> · <span id="bloomCount">0</span>/<span id="gardenTopicStat">0</span> blooming</div>
+          </div>
+          <div class="garden-actions-top">
+            <button class="garden-pill-btn" type="button" onclick="nurtureGarden()" title="Water & gentle breeze" aria-label="Water garden">💧 <span>Mist</span></button>
+            <button class="garden-pill-btn garden-weather" id="gardenWeather" type="button" onclick="cycleGardenWeather()" title="Change sky ambiance" aria-label="Change sky ambiance">☀</button>
+          </div>
+        </div>
+
+        <div class="garden-biome-bar" id="gardenBiomeBar" role="tablist" aria-label="Hill garden cards"></div>
+
+        <div class="garden-stack-rail" id="gardenStackRail" aria-label="Hill card stack position"></div>
+
+        <div class="garden-discovery" id="gardenDiscovery" role="status" aria-live="polite"></div>
+
+        <button class="garden-due-pill hidden" id="gardenDuePill" type="button" onclick="focusNextDuePlant()" aria-label="Visit plant needing care">
+          <span>🌱</span><span id="gardenDuePillLabel">Visit thirsty plant</span>
+        </button>
+
+        <div class="garden-stack-controls" id="gardenStackControls" aria-label="Flip hill cards">
+          <button class="stack-step-btn" id="prevHillBtn" type="button" onclick="stepHillCard(-1)" title="Previous hill card" aria-label="Previous hill card">↑</button>
+          <span class="stack-step-label" id="stackStepLabel">1 / 6</span>
+          <button class="stack-step-btn" id="nextHillBtn" type="button" onclick="stepHillCard(1)" title="Next hill card" aria-label="Next hill card">↓</button>
+        </div>
+
+        <div class="garden-specimen-card" id="gardenSpecimenCard" role="region" aria-label="Selected plant details">
+          <div class="specimen-info">
+            <div class="specimen-meta">
+              <span class="specimen-dot" id="specimenDot"></span>
+              <span id="specimenSubject">POLITY</span>
+              <span class="specimen-growth-dots" id="specimenGrowthDots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            </div>
+            <div class="specimen-name" id="specimenName">Fundamental Rights</div>
+            <div class="specimen-stage" id="specimenStage">In bloom · Level 2</div>
+          </div>
+          <div class="specimen-btns">
+            <button class="specimen-nav" type="button" onclick="stepSelectedPlant(-1)" title="Previous plant" aria-label="Previous plant">‹</button>
+            <button class="specimen-nav" type="button" onclick="stepSelectedPlant(1)" title="Next plant" aria-label="Next plant">›</button>
+            <button class="specimen-mist" type="button" onclick="mistSelectedPlant()" title="Mist this plant" aria-label="Mist this plant">💧</button>
+            <button class="specimen-go" type="button" onclick="revisitSelectedPlant()">Revisit →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="library">
+      <div class="library-header-row">
+        <div>
+          <div class="eyebrow">Your little library</div>
+          <h1 style="font-size:31px">All topics.</h1>
+        </div>
+        <button type="button" class="inline-add-btn" style="padding:7px 12px;font-size:12px" onclick="openSubjectModal('library')">＋ Subject</button>
+      </div>
+      <div class="list" id="allTopics"></div>
+    </section>
+
+    <section class="view" id="progress">
+      <div class="eyebrow">A quiet little record</div><h1 style="font-size:31px;margin-bottom:20px">Look how far.</h1>
+      <div class="stat-grid">
+        <div class="stat"><strong id="totalStat">5</strong><span>topics saved</span></div>
+        <div class="stat"><strong id="doneStat">0</strong><span>revisions done</span></div>
+      </div>
+      <p class="footer-note">small returns add up.</p>
+    </section>
+  </main>
+  <nav class="bottom">
+    <button class="nav active" onclick="showView('today',this)" aria-label="Today">⌂</button>
+    <button class="nav" id="gardenNavBtn" onclick="showView('garden',this)" aria-label="Garden">❀<span class="nav-badge" aria-hidden="true"></span></button>
+    <button class="nav" onclick="showView('library',this)" aria-label="Library">▤</button>
+    <button class="nav mission-nav-btn" id="missionTrigger" type="button" title="Switch mission" aria-label="Switch mission" onclick="toggleMissionSwitcher()">🏛️</button>
+  </nav>
+  <div class="toast" id="toast"></div>
+</div>
+<script src="app.js"></script>
+<script src="garden.js"></script>
+</body>
+</html>
