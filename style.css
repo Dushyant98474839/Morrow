@@ -1221,6 +1221,7 @@ input:focus,select:focus{border-color:var(--sage)}
 .library-subject-footer{
   display:flex;
   align-items:center;
+  justify-content:flex-end;
   margin-top:9px;
   padding:2px 2px;
 }
