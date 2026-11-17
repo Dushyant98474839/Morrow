@@ -211,6 +211,7 @@ let topics=[];
 let completed=0;
 let currentId=null;
 const expandedSubjects = new Set();
+const expandedTopics = new Set();
 
 let pendingGardenAdds=JSON.parse(localStorage.getItem('morrowPendingGardenAdds')||'{}');
 let pendingGardenBlooms=JSON.parse(localStorage.getItem('morrowPendingGardenBlooms')||'{}');
@@ -868,6 +869,16 @@ function dateValue(ts){
  const d=new Date(ts);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 function displayDate(ts){return ts?new Date(ts).toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'}):'Not revised yet'}
+function toggleTopicCard(id, el){
+ const card = el ? el.closest('.library-topic') : document.getElementById('topic-card-' + id);
+ if(!card) return;
+ const isOpen = card.classList.toggle('is-expanded');
+ if(isOpen) expandedTopics.add(id);
+ else expandedTopics.delete(id);
+ const arrow = card.querySelector('.library-topic-arrow');
+ if(arrow) arrow.textContent = isOpen ? '▾' : '›';
+}
+
 function toggleSubject(key){
  if(expandedSubjects.has(key)) expandedSubjects.delete(key); else expandedSubjects.add(key);
  render();
@@ -908,39 +919,55 @@ function renderLibrary(){
     <span class="library-subject-biome-dot" style="background:${arch.dot}" title="${escapeHtml(arch.label)}"></span>
     <span>${escapeHtml(subject)}</span>
     <span class="library-empty-subject">${items.length} ${items.length===1?'topic':'topics'}</span>
+    ${expanded ? `
+     <span class="lib-del-subject-icon-btn" role="button" tabindex="0" title="Delete subject ${escapeHtml(subject)}" aria-label="Delete subject ${escapeHtml(subject)}" onclick="event.stopPropagation();promptDeleteSubject(this.dataset.subj)" data-subj="${escapeHtml(subject)}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11"/><path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"/><path d="M4 4.5l.8 9.2A1.5 1.5 0 0 0 6.3 15h3.4a1.5 1.5 0 0 0 1.5-1.3l.8-9.2"/><path d="M6.8 7.5v4.5"/><path d="M9.2 7.5v4.5"/></svg></span>
+    ` : ''}
     <span class="library-subject-chevron">›</span>
    </button>
    <div class="library-subject-content" ${expanded?'':'hidden'}>
-    ${items.length ? items.sort((a,b)=>a.name.localeCompare(b.name)).map(t=>`
-     <article class="library-topic ${t.graduated?'is-graduated':''} ${t.paused?'is-paused':''}">
-      <div class="library-topic-main" onclick="openTopic(${t.id})">
+    ${items.length ? items.sort((a,b)=>a.name.localeCompare(b.name)).map(t=>{
+     const isExpanded = expandedTopics.has(t.id);
+     return `
+     <article class="library-topic ${t.graduated?'is-graduated':''} ${t.paused?'is-paused':''} ${isExpanded?'is-expanded':''}" id="topic-card-${t.id}">
+      <div class="library-topic-main" onclick="toggleTopicCard(${t.id}, this)">
        <span class="dot ${t.graduated?'gold':t.paused?'blue':dueState(t)==='dead'?'clay':t.tone||''}"></span>
        <span class="library-topic-name">${escapeHtml(t.name)}</span>
        ${renderRevisionDots(t)}
-       <span class="library-topic-arrow">›</span>
+       <span class="library-topic-arrow">${isExpanded?'▾':'›'}</span>
       </div>
-      <div class="library-dates">
-       <div class="library-date"><label>Last revised</label><span>${displayDate(t.lastReviewed)}</span></div>
-       ${!t.graduated ? `
-       <div class="library-date"><label>Next revision · changeable</label>
-        <input aria-label="Next revision date for ${escapeHtml(t.name)}" type="date" min="${dateValue(todayStart())}" value="${dateValue(t.dueAt)}" onchange="changeNextDate(${t.id},this.value)">
-       </div>` : ''}
+      <div class="library-topic-details">
+       <div class="library-dates">
+        <div class="library-date"><label>Last revised</label><span>${displayDate(t.lastReviewed)}</span></div>
+        ${!t.graduated ? `
+        <div class="library-date"><label>Next revision · changeable</label>
+         <input aria-label="Next revision date for ${escapeHtml(t.name)}" type="date" min="${dateValue(todayStart())}" value="${dateValue(t.dueAt)}" onchange="changeNextDate(${t.id},this.value)">
+        </div>` : ''}
+       </div>
+       <div class="library-topic-actions">
+        <button type="button" class="lib-btn review-btn" onclick="event.stopPropagation();openTopic(${t.id})">Review →</button>
+        ${(t.evergreenRevs||0)>=2 && !t.graduated ? `
+         <button type="button" class="lib-btn graduate-btn-pill" onclick="event.stopPropagation();graduateTopic(${t.id})">🎓 Graduate topic</button>
+        ` : ''}
+        <button type="button" class="lib-btn replant-btn" onclick="event.stopPropagation();openReplantModal(${t.id})">🌱 Re-plant</button>
+        ${!t.graduated ? `
+         <button type="button" class="lib-btn pause-btn" onclick="event.stopPropagation();togglePauseTopic(${t.id})">${t.paused?'▶ Resume':'⏸ Put on hold'}</button>
+        ` : ''}
+         <button type="button" class="lib-del-icon-btn" title="Delete ${escapeHtml(t.name)}" aria-label="Delete ${escapeHtml(t.name)}" onclick="event.stopPropagation();promptDeleteTopic(${t.id})"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11"/><path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"/><path d="M4 4.5l.8 9.2A1.5 1.5 0 0 0 6.3 15h3.4a1.5 1.5 0 0 0 1.5-1.3l.8-9.2"/><path d="M6.8 7.5v4.5"/><path d="M9.2 7.5v4.5"/></svg></button>
+       </div>
       </div>
-      <div class="library-topic-actions">
-       ${(t.evergreenRevs||0)>=2 && !t.graduated ? `
-        <button type="button" class="lib-btn graduate-btn-pill" onclick="event.stopPropagation();graduateTopic(${t.id})">🎓 Grad</button>
-       ` : ''}
-       <button type="button" class="lib-btn replant-btn" onclick="event.stopPropagation();openReplantModal(${t.id})">🌱 Re-plant</button>
-       ${!t.graduated ? `
-        <button type="button" class="lib-btn pause-btn" onclick="event.stopPropagation();togglePauseTopic(${t.id})">${t.paused?'▶ Resume':'⏸ Pause'}</button>
-       ` : ''}
-        <button type="button" class="lib-del-icon-btn"  title="Delete ${escapeHtml(t.name)}" aria-label="Delete ${escapeHtml(t.name)}" onclick="event.stopPropagation();promptDeleteTopic(${t.id})"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11"/><path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"/><path d="M4 4.5l.8 9.2A1.5 1.5 0 0 0 6.3 15h3.4a1.5 1.5 0 0 0 1.5-1.3l.8-9.2"/><path d="M6.8 7.5v4.5"/><path d="M9.2 7.5v4.5"/></svg></button>
-      </div>
-     </article>`).join('') : `
+     </article>`;
+    }).join('') : `
     <div class="library-empty-card">
      <span>${arch.icon} ${escapeHtml(arch.label)} ready for its first seed.</span>
-      <button type="button" class="inline-add-btn" onclick="openAddWithSubject(this.dataset.subj)" data-subj="${escapeHtml(subject)}">+ Topic</button>
+     <button type="button" class="inline-add-btn" onclick="openAddWithSubject(this.dataset.subj)" data-subj="${escapeHtml(subject)}">+ Topic</button>
     </div>`}
+    <div class="library-subject-footer">
+     <button type="button" class="inline-add-btn" onclick="openAddWithSubject(this.dataset.subj)" data-subj="${escapeHtml(subject)}">＋ Add topic</button>
+     <button type="button" class="lib-del-subject-footer-btn" onclick="promptDeleteSubject(this.dataset.subj)" data-subj="${escapeHtml(subject)}">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11"/><path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"/><path d="M4 4.5l.8 9.2A1.5 1.5 0 0 0 6.3 15h3.4a1.5 1.5 0 0 0 1.5-1.3l.8-9.2"/><path d="M6.8 7.5v4.5"/><path d="M9.2 7.5v4.5"/></svg>
+      Delete subject
+     </button>
+    </div>
    </div>
   </section>`;
  }).join('');
@@ -1158,6 +1185,52 @@ function togglePauseTopic(id){
  save();render();
  toast(t.paused?`⏸ "${t.name}" put on hold · resting peacefully`:`▶ "${t.name}" resumed · back in active garden ✿`);
 }
+let pendingDeleteSubjectName = null;
+
+function promptDeleteSubject(subject){
+ if(!subject) return;
+ pendingDeleteSubjectName = subject;
+ const count = topics.filter(t => (t.subject || '').trim() === subject.trim()).length;
+ const msg = document.getElementById('subjectDeleteMessage');
+ if(msg){
+  msg.innerHTML = count > 0 
+   ? `Delete subject <strong>"${escapeHtml(subject)}"</strong> and its <strong>${count} topic${count === 1 ? '' : 's'}</strong>? This cannot be undone.`
+   : `Delete empty subject <strong>"${escapeHtml(subject)}"</strong> from your library?`;
+ }
+ const modal = document.getElementById('subjectDeleteModal');
+ const backdrop = document.getElementById('subjectDeleteBackdrop');
+ if(modal) modal.classList.add('open');
+ if(backdrop) backdrop.classList.add('open');
+}
+
+function closeSubjectDeleteModal(){
+ pendingDeleteSubjectName = null;
+ document.getElementById('subjectDeleteModal')?.classList.remove('open');
+ document.getElementById('subjectDeleteBackdrop')?.classList.remove('open');
+}
+
+function confirmDeleteSubject(){
+ if(!pendingDeleteSubjectName) return;
+ const subj = pendingDeleteSubjectName;
+ const m = currentMission();
+ 
+ if(Array.isArray(m.subjects)){
+  m.subjects = m.subjects.filter(s => (s || '').trim().toLowerCase() !== subj.trim().toLowerCase());
+  localStorage.setItem('morrowMissions', JSON.stringify(missions));
+ }
+ if(m.subjectBiomes && m.subjectBiomes[subj]){
+  delete m.subjectBiomes[subj];
+  localStorage.setItem('morrowMissions', JSON.stringify(missions));
+ }
+ topics = topics.filter(t => (t.subject || '').trim() !== subj.trim());
+ expandedSubjects.clear();
+ 
+ closeSubjectDeleteModal();
+ save();
+ render();
+ toast(`Deleted subject "${subj}" ✿`);
+}
+
 let pendingDeleteTopicId = null;
 
 function promptDeleteTopic(id){
