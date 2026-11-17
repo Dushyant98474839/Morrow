@@ -885,7 +885,7 @@ function toggleSubject(key){
 }
 function renderRevisionDots(t){
  if(t.graduated) return `<span class="library-rev-dots" title="Graduated · Mastered" aria-label="Graduated · Mastered" style="background:rgba(218,179,90,.18);color:#967625;padding:2px 7px;font-size:11px;font-weight:700">🎓 Mastered</span>`;
- if(t.paused) return `<span class="library-rev-dots" title="On hold" aria-label="On hold" style="background:rgba(140,140,130,.15);color:#737368;padding:2px 6px;font-size:10px;font-weight:600">⏸ On hold</span>`;
+ if(t.paused) return `<span class="library-rev-dots" title="On hold" aria-label="On hold" style="background:rgba(140,140,130,.15);color:#737368;padding:2px 6px;font-size:10px;font-weight:600">On hold</span>`;
  const count=Math.max(0,Number(t.level)||0);
  const maxDots=5;
  const filled=Math.min(maxDots,count);
@@ -944,13 +944,13 @@ function renderLibrary(){
         </div>` : ''}
        </div>
        <div class="library-topic-actions">
-        <button type="button" class="lib-btn review-btn" onclick="event.stopPropagation();openTopic(${t.id})">Review →</button>
+        <button type="button" class="lib-btn review-btn" onclick="event.stopPropagation();openTopic(${t.id})">Revisit</button>
         ${(t.evergreenRevs||0)>=2 && !t.graduated ? `
          <button type="button" class="lib-btn graduate-btn-pill" onclick="event.stopPropagation();graduateTopic(${t.id})">🎓 Graduate topic</button>
         ` : ''}
         <button type="button" class="lib-btn replant-btn" onclick="event.stopPropagation();openReplantModal(${t.id})">🌱 Re-plant</button>
         ${!t.graduated ? `
-         <button type="button" class="lib-btn pause-btn" onclick="event.stopPropagation();togglePauseTopic(${t.id})">${t.paused?'▶ Resume':'⏸ Put on hold'}</button>
+         <button type="button" class="lib-btn pause-btn" onclick="event.stopPropagation();togglePauseTopic(${t.id})">${t.paused?'Resume':'hold'}</button>
         ` : ''}
          <button type="button" class="lib-del-icon-btn" title="Delete ${escapeHtml(t.name)}" aria-label="Delete ${escapeHtml(t.name)}" onclick="event.stopPropagation();promptDeleteTopic(${t.id})"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11"/><path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"/><path d="M4 4.5l.8 9.2A1.5 1.5 0 0 0 6.3 15h3.4a1.5 1.5 0 0 0 1.5-1.3l.8-9.2"/><path d="M6.8 7.5v4.5"/><path d="M9.2 7.5v4.5"/></svg></button>
        </div>
@@ -1177,7 +1177,7 @@ function togglePauseTopic(id){
   t.dueAt=todayStart();
  }
  save();render();
- toast(t.paused?`⏸ "${t.name}" put on hold · resting peacefully`:`▶ "${t.name}" resumed · back in active garden ✿`);
+ toast(t.paused?` "${t.name}" put on hold · resting peacefully`:`"${t.name}" resumed · back in active garden ✿`);
 }
 let pendingDeleteSubjectName = null;
 
