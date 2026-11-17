@@ -931,7 +931,7 @@ function renderLibrary(){
      <article class="library-topic ${t.graduated?'is-graduated':''} ${t.paused?'is-paused':''} ${isExpanded?'is-expanded':''}" id="topic-card-${t.id}">
       <div class="library-topic-main" onclick="toggleTopicCard(${t.id}, this)">
        <span class="dot ${t.graduated?'gold':t.paused?'blue':dueState(t)==='dead'?'clay':t.tone||''}"></span>
-       <span class="library-topic-name">${escapeHtml(t.name)}</span>
+       <span class="library-topic-name" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</span>
        ${renderRevisionDots(t)}
        <span class="library-topic-arrow">${isExpanded?'▾':'›'}</span>
       </div>
