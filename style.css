@@ -1350,24 +1350,47 @@ input:focus,select:focus{border-color:var(--sage)}
   width:26px;
   height:26px;
   border-radius:8px;
-  color:#6e7563;
+  color:#7e8275;
   background:transparent;
   border:none;
   cursor:pointer;
-  opacity:.75;
-  transition:opacity .15s ease,background .15s ease;
+  opacity:.8;
+  transition:all .15s ease;
   margin-left:6px;
-  margin-right:1px;
+  margin-right:2px;
 }
 .lib-edit-subject-icon-btn:hover{
   opacity:1;
-  background:rgba(110,117,99,.12);
-  color:var(--ink);
+  background:rgba(126,130,117,.15);
+  color:#44483c;
+  transform:scale(1.08);
 }
-.lib-btn.edit-topic-btn{
-  background:rgba(110,117,99,.08);
-  color:var(--ink);
+.library-topic-action-icons{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  margin-left:auto;
 }
-.lib-btn.edit-topic-btn:hover{
-  background:rgba(110,117,99,.16);
+.library-topic-action-icons .lib-del-icon-btn{
+  margin-left:0;
+}
+.lib-icon-action-btn.edit-topic-icon-btn{
+  width:28px;
+  height:28px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border:none;
+  background:transparent;
+  color:#7e8275;
+  border-radius:8px;
+  cursor:pointer;
+  opacity:.8;
+  transition:all .15s ease;
+}
+.lib-icon-action-btn.edit-topic-icon-btn:hover{
+  opacity:1;
+  background:rgba(126,130,117,.15);
+  color:#44483c;
+  transform:scale(1.08);
 }

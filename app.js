@@ -921,6 +921,7 @@ function renderLibrary(){
     <span>${escapeHtml(subject)}</span>
     <span class="library-empty-subject">${items.length} ${items.length===1?'topic':'topics'}</span>
     ${expanded ? `
+     <span class="lib-edit-subject-icon-btn" role="button" tabindex="0" title="Edit ${escapeHtml(subject)}" aria-label="Edit ${escapeHtml(subject)}" onclick="event.stopPropagation();promptEditSubject(this.dataset.subj)" data-subj="${escapeHtml(subject)}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 2a2.121 2.121 0 0 1 3 3L5.5 13.5 2 14.5l1-3.5L11 2z"/></svg></span>
      <span class="lib-del-icon-btn lib-del-subject-btn" role="button" tabindex="0" title="Delete subject ${escapeHtml(subject)}" aria-label="Delete subject ${escapeHtml(subject)}" onclick="event.stopPropagation();promptDeleteSubject(this.dataset.subj)" data-subj="${escapeHtml(subject)}"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11"/><path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"/><path d="M4 4.5l.8 9.2A1.5 1.5 0 0 0 6.3 15h3.4a1.5 1.5 0 0 0 1.5-1.3l.8-9.2"/><path d="M6.8 7.5v4.5"/><path d="M9.2 7.5v4.5"/></svg></span>
     ` : ''}
     <span class="library-subject-chevron">›</span>
@@ -946,7 +947,6 @@ function renderLibrary(){
        </div>
        <div class="library-topic-actions">
         <button type="button" class="lib-btn review-btn" onclick="event.stopPropagation();openTopic(${t.id})">Revisit</button>
-        <button type="button" class="lib-btn edit-topic-btn" onclick="event.stopPropagation();promptEditTopicName(${t.id})">✏️ Rename</button>
         ${(t.evergreenRevs||0)>=2 && !t.graduated ? `
          <button type="button" class="lib-btn graduate-btn-pill" onclick="event.stopPropagation();graduateTopic(${t.id})">🎓 Graduate topic</button>
         ` : ''}
@@ -954,7 +954,10 @@ function renderLibrary(){
         ${!t.graduated ? `
          <button type="button" class="lib-btn pause-btn" onclick="event.stopPropagation();togglePauseTopic(${t.id})">${t.paused?'Resume':'hold'}</button>
         ` : ''}
+        <div class="library-topic-action-icons">
+         <button type="button" class="lib-icon-action-btn edit-topic-icon-btn" title="Rename ${escapeHtml(t.name)}" aria-label="Rename ${escapeHtml(t.name)}" onclick="event.stopPropagation();promptEditTopicName(${t.id})"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 2a2.121 2.121 0 0 1 3 3L5.5 13.5 2 14.5l1-3.5L11 2z"/></svg></button>
          <button type="button" class="lib-del-icon-btn" title="Delete ${escapeHtml(t.name)}" aria-label="Delete ${escapeHtml(t.name)}" onclick="event.stopPropagation();promptDeleteTopic(${t.id})"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11"/><path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"/><path d="M4 4.5l.8 9.2A1.5 1.5 0 0 0 6.3 15h3.4a1.5 1.5 0 0 0 1.5-1.3l.8-9.2"/><path d="M6.8 7.5v4.5"/><path d="M9.2 7.5v4.5"/></svg></button>
+        </div>
        </div>
       </div>
      </article>`;
