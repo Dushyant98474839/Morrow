@@ -264,7 +264,30 @@
   <span class="petal petal-one" aria-hidden="true"></span>
   <span class="petal petal-two" aria-hidden="true"></span>
   <span class="petal petal-three" aria-hidden="true"></span>
-  <div class="status"><span>morrow</span><span>● ● ▰</span></div>
+  <div class="status">
+    <button type="button" class="status-brand" onclick="toast('🌱 morrow · gentle revision, one day at a time')" title="Morrow">
+      <span class="status-brand-glyph" aria-hidden="true">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 21v-7"/>
+          <path d="M12 14c0-3.5 3-6 6-6 0 3-2.5 6-6 6z" fill="currentColor" fill-opacity="0.25"/>
+          <path d="M12 14c0-2.8-2.2-4.8-4.8-4.8 0 2.6 2 4.8 4.8 4.8z" fill="currentColor" fill-opacity="0.25"/>
+        </svg>
+      </span>
+      <span class="status-brand-name">morrow<span class="status-brand-dot">.</span></span>
+    </button>
+    <div class="status-telemetry" aria-hidden="true">
+      <span class="status-signal">
+        <span class="sig-bar b1"></span>
+        <span class="sig-bar b2"></span>
+        <span class="sig-bar b3"></span>
+        <span class="sig-bar b4"></span>
+      </span>
+      <span class="status-battery">
+        <span class="battery-capsule"><span class="battery-fill"></span></span>
+        <span class="battery-tip"></span>
+      </span>
+    </div>
+  </div>
   <header class="top">
     <div><div class="eyebrow" id="dateLabel">A little space to return</div><h1 id="pageTitle">Good morning.</h1></div>
     <div style="display:flex;align-items:center;gap:7px">
