@@ -520,13 +520,17 @@
    const isHillWithering = subjTopics.length > 0 && (overdueInSubj / subjTopics.length >= 0.45);
    if(!isHillWithering && hill.trees.length > 0 && hash(hSeed + 673) > 0.28){
     const tr = hill.trees[0];
+    const initLx = Math.max(36, Math.min(W - 36, tr.lx + (tr.lx < W * 0.5 ? 24 : -24)));
     hill.squirrel = {
      treeIdx: 0,
-     lx: tr.lx + (tr.lx < W * 0.5 ? 20 : -20),
+     lx: initLx,
      ly: tr.ly + 4,
      dir: tr.lx < W * 0.5 ? 1 : -1,
-     timer: 2 + hash(hSeed + 601) * 3,
-     eating: true,
+     state: 'nibble', // 'nibble', 'hop', 'scamper', 'lookout'
+     timer: 1.5 + hash(hSeed + 601) * 2,
+     speed: 0,
+     hopPhase: 0,
+     hopAmp: 0,
      scamperBoost: 0,
      phase: hash(hSeed + 607) * Math.PI * 2
     };
@@ -1153,12 +1157,15 @@
    }
   }
 
-  // 9. Hit-test Squirrel
-  if(frontHill.squirrel && Math.hypot(lx - frontHill.squirrel.lx, ly - frontHill.squirrel.ly) < 30){
-   frontHill.squirrel.scamperBoost = 2.0;
-   frontHill.squirrel.dir *= -1;
-   spawnPetals(sx, sy - 10, '#d98b58', 4);
-   showWhisper('A curious squirrel twitches its bushy tail! 🐿️');
+  // 9. Hit-test Squirrel (hops & scampers away!)
+  if(frontHill.squirrel && Math.hypot(lx - frontHill.squirrel.lx, ly - frontHill.squirrel.ly) < 32){
+   frontHill.squirrel.scamperBoost = 2.5;
+   frontHill.squirrel.state = 'scamper';
+   frontHill.squirrel.speed = 105;
+   frontHill.squirrel.timer = 1.8;
+   frontHill.squirrel.dir = (lx < frontHill.squirrel.lx ? 1 : -1);
+   spawnPetals(sx, sy - 10, '#d98b58', 5);
+   showWhisper('A playful squirrel hops and scampers across the grass! 🐿️💨');
    return;
   }
 
@@ -2482,95 +2489,230 @@
   ctx.restore();
  }
 
- // ── Squirrel ─────────────────────────────────────────────────────────────
+ // ── Squirrel (Hopping, Scampering & Foraging) ────────────────────────────
  function drawSquirrel(sq, hill, pal, t, dt){
   sq.timer -= dt;
   if(sq.scamperBoost > 0) sq.scamperBoost = Math.max(0, sq.scamperBoost - dt * 1.5);
+
+  // Tree shake reaction: if tree shakes, squirrel dashes!
+  const tr = hill.trees[sq.treeIdx % hill.trees.length];
+  if(tr && tr.shake > 0.35 && sq.state !== 'scamper'){
+   sq.scamperBoost = 2.4;
+   sq.state = 'scamper';
+   sq.timer = 1.6;
+   sq.speed = 100;
+   sq.dir = sq.lx < tr.lx ? -1 : 1;
+  }
+
+  // State transitions
   if(sq.timer <= 0){
-   sq.timer = 2 + Math.random() * 3.5;
-   sq.eating = Math.random() < 0.6;
-   if(!sq.eating){
-    sq.dir *= -1;
+   if(sq.scamperBoost > 0.2){
+    sq.state = 'scamper';
+    sq.timer = 1.2 + Math.random() * 1.2;
+    sq.speed = 90 + Math.random() * 30;
+    sq.dir = Math.random() < 0.5 ? -1 : 1;
+   } else if(sq.state === 'scamper' || sq.state === 'hop'){
+    // Stop hopping to nibble or stand on lookout
+    sq.state = Math.random() < 0.65 ? 'nibble' : 'lookout';
+    sq.timer = 1.8 + Math.random() * 2.6;
+    sq.speed = 0;
+    sq.hopAmp = 0;
+   } else {
+    // From stationary to hopping or scampering!
+    const roll = Math.random();
+    if(roll < 0.45){
+     sq.state = 'hop';
+     sq.timer = 1.0 + Math.random() * 1.5;
+     sq.dir = Math.random() < 0.5 ? -1 : 1;
+     if(sq.lx < 45) sq.dir = 1;
+     if(sq.lx > W - 45) sq.dir = -1;
+     sq.speed = 40 + Math.random() * 25;
+    } else if(roll < 0.78){
+     sq.state = 'scamper';
+     sq.timer = 1.2 + Math.random() * 1.6;
+     sq.dir = Math.random() < 0.5 ? -1 : 1;
+     if(sq.lx < 45) sq.dir = 1;
+     if(sq.lx > W - 45) sq.dir = -1;
+     sq.speed = 78 + Math.random() * 35;
+    } else {
+     sq.state = sq.state === 'nibble' ? 'lookout' : 'nibble';
+     sq.timer = 1.5 + Math.random() * 2.5;
+     if(Math.random() < 0.4) sq.dir *= -1;
+     sq.speed = 0;
+     sq.hopAmp = 0;
+    }
    }
+  }
+
+  // Movement & Hopping
+  const isMoving = sq.state === 'scamper' || sq.state === 'hop';
+  if(isMoving){
+   const moveSpeed = (sq.speed || 45) * (1 + sq.scamperBoost * 0.75);
+   sq.lx += sq.dir * moveSpeed * dt;
+   if(sq.lx < 34){ sq.lx = 34; sq.dir = 1; }
+   if(sq.lx > W - 34){ sq.lx = W - 34; sq.dir = -1; }
+
+   const hopRate = sq.state === 'scamper' ? 8.6 : 5.4;
+   sq.hopPhase = (sq.hopPhase + dt * hopRate) % 1;
+   sq.hopAmp = Math.abs(Math.sin(sq.hopPhase * Math.PI));
+  } else {
+   sq.hopAmp = 0;
   }
 
   const col = pal.isNight ? '#62412e' : '#b25e32';
   const belly = pal.isNight ? '#e2d6c6' : '#fcf4ea';
   const shadow = pal.isNight ? 'rgba(16,26,20,0.25)' : 'rgba(28,42,28,0.18)';
-  const twitch = Math.sin(t * 7 + sq.phase) * (sq.eating ? 0.12 : 0.05);
+  const hopY = -sq.hopAmp * (sq.state === 'scamper' ? 7.5 : 5.0);
+  const twitch = Math.sin(t * 8 + sq.phase) * (sq.state === 'nibble' ? 0.16 : 0.08);
 
   ctx.save();
-  ctx.translate(sq.lx, sq.ly);
+  ctx.translate(sq.lx, sq.ly + hopY);
   ctx.scale(sq.dir, 1);
 
   // Shadow
   ctx.fillStyle = shadow;
   ctx.beginPath();
-  ctx.ellipse(0, 3, 9, 3, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 3 - hopY * 0.2, (isMoving ? 11 : 9) * (1 - sq.hopAmp * 0.25), 3, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Bushy S-curved Tail
+  // Bushy Tail: streams behind dynamically when hopping, curls up over back when sitting
   ctx.save();
-  ctx.translate(-4, -1);
-  ctx.rotate(twitch);
-  ctx.fillStyle = col;
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.quadraticCurveTo(-10, -5, -8, -14);
-  ctx.quadraticCurveTo(-6, -20, 2, -18);
-  ctx.quadraticCurveTo(8, -16, 6, -10);
-  ctx.quadraticCurveTo(4, -4, 0, 0);
-  ctx.fill();
-
-  ctx.fillStyle = pal.isNight ? '#7a5440' : '#c9784a';
-  ctx.beginPath();
-  ctx.ellipse(-2, -12, 3.5, 6, 0.2, 0, Math.PI * 2);
-  ctx.fill();
+  if(isMoving){
+   ctx.translate(-5, -2);
+   const tailWave = Math.sin(sq.hopPhase * Math.PI * 2) * 0.28;
+   ctx.rotate(-0.45 + tailWave);
+   ctx.fillStyle = col;
+   ctx.beginPath();
+   ctx.moveTo(0, 0);
+   ctx.quadraticCurveTo(-14, 4, -20, -3);
+   ctx.quadraticCurveTo(-24, -9, -15, -12);
+   ctx.quadraticCurveTo(-6, -11, 0, 0);
+   ctx.fill();
+   ctx.fillStyle = pal.isNight ? '#7a5440' : '#c9784a';
+   ctx.beginPath();
+   ctx.ellipse(-14, -5, 5, 3.2, -0.2, 0, Math.PI * 2);
+   ctx.fill();
+  } else {
+   ctx.translate(-4, -1);
+   ctx.rotate(twitch);
+   ctx.fillStyle = col;
+   ctx.beginPath();
+   ctx.moveTo(0, 0);
+   ctx.quadraticCurveTo(-10, -5, -8, -14);
+   ctx.quadraticCurveTo(-6, -20, 2, -18);
+   ctx.quadraticCurveTo(8, -16, 6, -10);
+   ctx.quadraticCurveTo(4, -4, 0, 0);
+   ctx.fill();
+   ctx.fillStyle = pal.isNight ? '#7a5440' : '#c9784a';
+   ctx.beginPath();
+   ctx.ellipse(-2, -12, 3.5, 6, 0.2, 0, Math.PI * 2);
+   ctx.fill();
+  }
   ctx.restore();
 
-  // Body
+  // Body & Head
   ctx.fillStyle = col;
-  ctx.beginPath();
-  ctx.ellipse(1, -3, 4.8, 6, 0.25, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Cream Belly
-  ctx.fillStyle = belly;
-  ctx.beginPath();
-  ctx.ellipse(3, -2.5, 2.5, 4.5, 0.2, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Head
-  ctx.fillStyle = col;
-  ctx.beginPath();
-  ctx.arc(4, -9, 3.4, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Ear with tuft
-  ctx.beginPath();
-  ctx.moveTo(3, -12);
-  ctx.lineTo(4.5, -15.5);
-  ctx.lineTo(6, -12);
-  ctx.closePath();
-  ctx.fill();
-
-  // Eye
-  ctx.fillStyle = pal.isNight ? '#c09880' : '#1e140e';
-  ctx.beginPath();
-  ctx.arc(4.8, -9.5, 0.9, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Paws
-  ctx.fillStyle = col;
-  ctx.beginPath();
-  ctx.ellipse(4.5, -4.5, 1.8, 1.2, -0.2, 0, Math.PI * 2);
-  ctx.fill();
-
-  if(sq.eating){
-   // Acorn / seed
-   ctx.fillStyle = pal.isNight ? '#785b3a' : '#8e5927';
+  if(isMoving){
+   // Quadruped bounding posture
    ctx.beginPath();
-   ctx.ellipse(6.2, -4.8, 1.6, 2.2, 0.3, 0, Math.PI * 2);
+   ctx.ellipse(2, -2, 7, 4.2, -0.15, 0, Math.PI * 2);
+   ctx.fill();
+   ctx.fillStyle = belly;
+   ctx.beginPath();
+   ctx.ellipse(2, -0.5, 5, 2.8, -0.1, 0, Math.PI * 2);
+   ctx.fill();
+
+   // Head
+   ctx.fillStyle = col;
+   ctx.beginPath();
+   ctx.arc(8, -5, 3.4, 0, Math.PI * 2);
+   ctx.fill();
+
+   // Snout
+   ctx.beginPath();
+   ctx.ellipse(10.5, -4.5, 1.8, 1.5, 0.1, 0, Math.PI * 2);
+   ctx.fill();
+
+   // Ear with tuft
+   ctx.beginPath();
+   ctx.moveTo(6.5, -8);
+   ctx.lineTo(8, -11.5);
+   ctx.lineTo(9.5, -8);
+   ctx.closePath();
+   ctx.fill();
+
+   // Eye
+   ctx.fillStyle = pal.isNight ? '#c09880' : '#1e140e';
+   ctx.beginPath();
+   ctx.arc(8.6, -5.5, 0.9, 0, Math.PI * 2);
+   ctx.fill();
+
+   // Paws hopping
+   ctx.fillStyle = col;
+   const legExt = Math.sin(sq.hopPhase * Math.PI) * 3;
+   ctx.beginPath();
+   ctx.ellipse(-3 + legExt, 3, 2.5, 1.4, -0.2, 0, Math.PI * 2);
+   ctx.ellipse(5 - legExt, 3, 2.2, 1.4, 0.2, 0, Math.PI * 2);
+   ctx.fill();
+  } else {
+   // Upright sitting / lookout posture
+   const isLookout = sq.state === 'lookout';
+   const bodyH = isLookout ? 7.2 : 6.0;
+   const bodyY = isLookout ? -4.5 : -3;
+
+   ctx.beginPath();
+   ctx.ellipse(1, bodyY, 4.8, bodyH, 0.15, 0, Math.PI * 2);
+   ctx.fill();
+
+   ctx.fillStyle = belly;
+   ctx.beginPath();
+   ctx.ellipse(2.5, bodyY + 0.5, 2.6, bodyH * 0.72, 0.1, 0, Math.PI * 2);
+   ctx.fill();
+
+   // Head
+   const headY = isLookout ? -12 : -9;
+   ctx.fillStyle = col;
+   ctx.beginPath();
+   ctx.arc(3.5, headY, 3.4, 0, Math.PI * 2);
+   ctx.fill();
+
+   // Snout
+   ctx.beginPath();
+   ctx.ellipse(6, headY + 0.5, 2.0, 1.6, 0.1, 0, Math.PI * 2);
+   ctx.fill();
+
+   // Ear with tuft
+   ctx.beginPath();
+   ctx.moveTo(2.5, headY - 3);
+   ctx.lineTo(4, headY - 6.5);
+   ctx.lineTo(5.5, headY - 3);
+   ctx.closePath();
+   ctx.fill();
+
+   // Eye
+   ctx.fillStyle = pal.isNight ? '#c09880' : '#1e140e';
+   ctx.beginPath();
+   ctx.arc(4.2, headY - 0.5, 0.9, 0, Math.PI * 2);
+   ctx.fill();
+
+   // Front paws
+   ctx.fillStyle = col;
+   ctx.beginPath();
+   ctx.ellipse(4.5, headY + 4.5, 1.8, 1.2, -0.2, 0, Math.PI * 2);
+   ctx.fill();
+
+   if(sq.state === 'nibble'){
+    // Acorn
+    ctx.fillStyle = pal.isNight ? '#785b3a' : '#8e5927';
+    ctx.beginPath();
+    ctx.ellipse(6.2, headY + 4.2, 1.6, 2.2, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+   }
+
+   // Feet
+   ctx.fillStyle = col;
+   ctx.beginPath();
+   ctx.ellipse(1.5, 3.5, 3.8, 1.5, 0, 0, Math.PI * 2);
    ctx.fill();
   }
 
