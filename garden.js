@@ -136,15 +136,11 @@
  /* Compute visual card-stack transform for hill `i` given continuous `activeHillPos` */
  function getHillCardPose(hill){
   const rel = hill.index - activeHillPos;
+  const frontCrestY = H * 0.41;
 
-  // Adaptive Auto-Framing: keeps everything comfortably in frame without clipping as flowers or features expand!
-  const count = hill.totalCount || 0;
-  const countOverage = Math.max(0, count - 4);
-  const autoFitScale = Math.min(1.0, Math.max(0.78, 1.0 - countOverage * 0.011 - (H < 760 ? 0.06 : 0)));
-  const frontCrestY = (H * 0.38) - Math.min(26, countOverage * 1.4) + (1 - autoFitScale) * 16;
-
-  // User interactive zoom and pan
-  const userScale = gardenCurrentZoom;
+  // Frame size of hill remains constant
+  // Interactive user zoom and pan
+  const userScale = typeof gardenCurrentZoom !== 'undefined' ? gardenCurrentZoom : 1.0;
   const isFront = Math.abs(rel) < 0.45;
   const effectiveUserScale = isFront ? userScale : (1 + (userScale - 1) * 0.32);
   const effectivePanX = isFront ? gardenPanX : (gardenPanX * 0.28);
@@ -153,8 +149,8 @@
   if(rel >= 0){
    // Hills stacked behind the active hill, cascading upward like cards
    const compressedLift = (1 - Math.exp(-rel * 0.46)) * (H * 0.185) + Math.min(rel, 5) * 12;
-   const crestY = (frontCrestY - compressedLift) + effectivePanY;
-   const scale = Math.max(0.68, (1 - rel * 0.046) * autoFitScale * effectiveUserScale);
+   const crestY = frontCrestY - compressedLift + effectivePanY;
+   const scale = Math.max(0.75, 1 - rel * 0.046) * effectiveUserScale;
    const shiftX = Math.sin(hill.index * 1.85) * Math.min(24, rel * 13) + effectivePanX;
    return {
     rel,
@@ -167,8 +163,8 @@
   }else{
    // Active front hill flipping downward off the stack toward the viewer
    const progress = Math.min(1.25, -rel);
-   const crestY = (frontCrestY + Math.pow(progress, 1.12) * (H * 0.65)) + effectivePanY;
-   const scale = (1 + progress * 0.055) * autoFitScale * effectiveUserScale;
+   const crestY = frontCrestY + Math.pow(progress, 1.12) * (H * 0.65) + effectivePanY;
+   const scale = (1 + progress * 0.055) * effectiveUserScale;
    const shiftX = effectivePanX;
    const alpha = Math.max(0, 1 - Math.pow(progress, 1.5) * 1.15);
    return {
@@ -357,8 +353,8 @@
   hillCards = [];
   const usedArchetypeIds = new Set();
 
-  const usableMeadowTop = 50;
-  const usableMeadowBottom = Math.max(200, Math.min(260, H * 0.38));
+  const usableMeadowTop = 52;
+  const usableMeadowBottom = Math.max(210, H * 0.44);
 
   activeSubjects.forEach((subj, idx) => {
    const subjTopics = (bySubject.get(subj) || []).slice().sort((a, b) => a.id - b.id);
@@ -624,37 +620,37 @@
     };
    }else{
     const spanY = usableMeadowBottom - usableMeadowTop;
-    const numBeds = count <= 3 ? count : count <= 7 ? 4 : count <= 14 ? 6 : 8;
-    const densityScale = count > 16 ? 0.78 : count > 10 ? 0.84 : count > 5 ? 0.90 : 0.96;
+    const proceduralZoom = Math.max(0.64, 0.98 - Math.max(0, count - 3) * 0.016);
+    const numBeds = count <= 3 ? count : count <= 6 ? 4 : count <= 12 ? 6 : count <= 18 ? 8 : 10;
 
     subjTopics.forEach((t, i) => {
      const prev = prevPlantMap.get(t.id);
      const bedIdx = i % numBeds;
      const bedSubIdx = Math.floor(i / numBeds);
 
-     // Tiered flower beds distributed across the meadow banks
+     // Procedural space distribution across meadow tiers
      const bedFrac = (bedIdx + 0.5) / numBeds;
-     const bedLy = usableMeadowTop + bedFrac * spanY + (hash(hSeed + bedIdx * 37 + 5) - 0.5) * 14;
+     const bedLy = usableMeadowTop + bedFrac * spanY + (hash(hSeed + bedIdx * 37 + 5) - 0.5) * 12;
      const pCenter = hillPathLocalX(hill, bedLy);
      const side = (bedIdx % 2 === 0) ? -1 : 1;
      const bankSpan = side < 0 ? (pCenter - 48) : (W - pCenter - 48);
 
-     // Base anchor for this cluster bed
-     const lateralRatio = 0.32 + 0.52 * hash(hSeed + bedIdx * 43 + 11);
+     // Bed center on bank
+     const lateralRatio = 0.30 + 0.54 * hash(hSeed + bedIdx * 43 + 11);
      const bedLx = pCenter + side * Math.max(34, bankSpan * lateralRatio);
 
-     // Dense companion clustering within each bed: increases density as new plants arrive!
+     // Companion clustering: shrinks stuff slightly and adds procedural spacing as count increases!
      let lx = bedLx;
      let ly = bedLy;
      if(bedSubIdx > 0){
       const angle = (bedSubIdx * 2.3999 + hash(t.id + 7) * 0.8);
-      const radX = (11 + bedSubIdx * 5.2) * (0.85 + hash(t.id + 11) * 0.3);
-      const radY = (7 + bedSubIdx * 3.6) * (0.85 + hash(t.id + 13) * 0.3);
+      const radX = (13 + bedSubIdx * 5.0) * proceduralZoom;
+      const radY = (8 + bedSubIdx * 3.4) * proceduralZoom;
       lx += Math.cos(angle) * radX;
       ly += Math.sin(angle) * radY;
      } else {
-      lx += (hash(t.id + 3) - 0.5) * 8;
-      ly += (hash(t.id + 4) - 0.5) * 6;
+      lx += (hash(t.id + 3) - 0.5) * 8 * proceduralZoom;
+      ly += (hash(t.id + 4) - 0.5) * 6 * proceduralZoom;
      }
 
      if(hill.pond){
@@ -673,11 +669,13 @@
 
      lx = Math.max(32, Math.min(W - 32, lx));
      ly = Math.max(usableMeadowTop - 10, Math.min(usableMeadowBottom + 12, ly));
+
+     const state = dueState(t);
      const level = t.level || 0;
      const species = speciesForTopic(t, i, hill);
      const fallenPetals = Array.from({ length: 4 }, (_, k) => ({
-      dx: (hash(t.id + k * 19) - 0.5) * 22,
-      dy: 2 + hash(t.id + k * 23) * 6,
+      dx: (hash(t.id + k * 19) - 0.5) * 20 * proceduralZoom,
+      dy: (2 + hash(t.id + k * 23) * 6) * proceduralZoom,
       rot: hash(t.id + k * 29) * Math.PI
      }));
 
@@ -688,7 +686,7 @@
       lx,
       ly,
       phase: hash(t.id + 7) * Math.PI * 2,
-      scale: (0.92 + hash(t.id + 13) * 0.18) * densityScale,
+      scale: (0.92 + hash(t.id + 13) * 0.18) * proceduralZoom,
       state,
       level,
       species,
