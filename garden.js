@@ -36,6 +36,9 @@
  let perchBirds = [];
  let dryLeaves = [];
  let seedPuffs = [];
+ let rainDrops = [];
+ let rainSplashes = [];
+ let glassDrops = [];
  let lastTs = 0;
 
  const WEATHER_MODES = [
@@ -90,11 +93,11 @@
    mist: 'rgba(168,196,184,0.14)', isNight: true, isRain: false, warmGlow: 1.0, tint: null
   },
   rain: {
-   skyTop: '#89a2a5', skyMid: '#b8c8c0', skyLow: '#cfdcd0',
-   sunColor: '#e8eee8', sunHalo: 'rgba(232,238,232,0.28)', sunY: 0.14,
-   rayColor: 'rgba(232, 240, 238, 0.04)',
-   ridgeFar: '#91a89b', ridgeMid: '#7b9585',
-   mist: 'rgba(226,236,232,0.38)', isNight: false, isRain: true, warmGlow: 0.68, tint: 'rgba(165, 192, 196, 0.16)'
+   skyTop: '#6b8288', skyMid: '#9ab0a6', skyLow: '#bdcebf',
+   sunColor: '#dbe4dc', sunHalo: 'rgba(215, 228, 222, 0.22)', sunY: 0.14,
+   rayColor: 'rgba(210, 224, 220, 0.03)',
+   ridgeFar: '#71897d', ridgeMid: '#5c7566',
+   mist: 'rgba(210, 226, 220, 0.42)', isNight: false, isRain: true, warmGlow: 0.65, tint: 'rgba(145, 175, 178, 0.14)'
   }
  };
 
@@ -1054,6 +1057,16 @@
   const btn = document.getElementById('gardenWeather');
   if(btn) btn.textContent = mode.icon;
   showWhisper(mode.label);
+ };
+
+ window.setGardenWeather = function(id){
+  const idx = WEATHER_MODES.findIndex(w => w.id === id);
+  if(idx !== -1){
+   weatherIdx = idx;
+   const mode = WEATHER_MODES[weatherIdx];
+   const btn = document.getElementById('gardenWeather');
+   if(btn) btn.textContent = mode.icon;
+  }
  };
 
  /* Card-Stack Drag / Flick / Tap Interactions */
@@ -3416,6 +3429,181 @@
   ctx.restore();
  }
 
+ // ── Botanical Rain & Misty Ambiance System ──────────────────────────────
+ function initRainSystem(){
+  if(rainDrops.length) return;
+  const count = 120;
+  for(let i = 0; i < count; i++){
+   const layer = i < 45 ? 0 : (i < 95 ? 1 : 2); // 0=far/background, 1=midground, 2=foreground
+   rainDrops.push({
+    layer,
+    x: Math.random() * (W + 60) - 30,
+    y: Math.random() * H,
+    vy: layer === 0 ? 320 + Math.random() * 80 : layer === 1 ? 480 + Math.random() * 110 : 700 + Math.random() * 140,
+    len: layer === 0 ? 8 + Math.random() * 6 : layer === 1 ? 14 + Math.random() * 8 : 22 + Math.random() * 12,
+    thick: layer === 0 ? 0.75 : layer === 1 ? 1.05 : 1.45,
+    alpha: layer === 0 ? 0.20 + Math.random() * 0.08 : layer === 1 ? 0.32 + Math.random() * 0.10 : 0.46 + Math.random() * 0.14
+   });
+  }
+  for(let i = 0; i < 9; i++){
+   glassDrops.push({
+    x: 20 + Math.random() * (W - 40),
+    y: 60 + Math.random() * (H * 0.75),
+    r: 1.6 + Math.random() * 1.8,
+    slideTimer: 3 + Math.random() * 10,
+    slideDist: 0
+   });
+  }
+ }
+
+ function updateAndDrawRain(dt, t, baseWind, targetLayer){
+  initRainSystem();
+
+  const slant = (baseWind * 55 + 12);
+  const slantRatio = slant / 500;
+
+  ctx.lineCap = 'round';
+
+  for(let i = 0; i < rainDrops.length; i++){
+   const d = rainDrops[i];
+   if(d.layer !== targetLayer) continue;
+
+   d.y += d.vy * dt;
+   d.x += (d.vy * slantRatio) * dt;
+
+   if(d.y > H + 25){
+    d.y = -25 - Math.random() * 30;
+    d.x = Math.random() * (W + 80) - 40;
+   }
+   if(d.x > W + 40) d.x = -40;
+   if(d.x < -40) d.x = W + 40;
+
+   // Raindrop streak with subtle silver-blue transparency
+   ctx.strokeStyle = `rgba(224, 238, 240, ${d.alpha.toFixed(2)})`;
+   ctx.lineWidth = d.thick;
+   ctx.beginPath();
+   ctx.moveTo(d.x, d.y);
+   ctx.lineTo(d.x - slantRatio * d.len, d.y - d.len);
+   ctx.stroke();
+
+   // Ground impact splash on midground and foreground layers
+   if(targetLayer >= 1 && d.y > H * 0.38 && d.y < H * 0.90){
+    if(Math.random() < 0.018 && rainSplashes.length < 30){
+     spawnRainSplash(d.x, d.y);
+    }
+   }
+  }
+ }
+
+ function spawnRainSplash(x, y){
+  rainSplashes.push({
+   x,
+   y,
+   r: 1.2,
+   maxR: 5.5 + Math.random() * 4.0,
+   life: 1.0,
+   decay: 3.5 + Math.random() * 1.5,
+   beads: [
+    { dx: 0, dy: 0, vx: (Math.random() - 0.5) * 26, vy: -16 - Math.random() * 20 },
+    ...(Math.random() > 0.4 ? [{ dx: 0, dy: 0, vx: (Math.random() - 0.5) * 22, vy: -12 - Math.random() * 16 }] : [])
+   ]
+  });
+ }
+
+ function updateAndDrawRainSplashes(dt){
+  for(let i = rainSplashes.length - 1; i >= 0; i--){
+   const sp = rainSplashes[i];
+   sp.life -= sp.decay * dt;
+   if(sp.life <= 0){
+    rainSplashes.splice(i, 1);
+    continue;
+   }
+   sp.r += (sp.maxR - sp.r) * Math.min(1, dt * 14);
+
+   // Expanding ground impact ripple ring
+   ctx.strokeStyle = `rgba(235, 248, 248, ${(sp.life * 0.44).toFixed(2)})`;
+   ctx.lineWidth = 1.0;
+   ctx.beginPath();
+   ctx.ellipse(sp.x, sp.y, sp.r, sp.r * 0.36, 0, 0, Math.PI * 2);
+   ctx.stroke();
+
+   // Tiny bouncing water droplet beads
+   ctx.fillStyle = `rgba(240, 252, 255, ${(sp.life * 0.70).toFixed(2)})`;
+   for(const b of sp.beads){
+    b.dx += b.vx * dt;
+    b.dy += b.vy * dt;
+    b.vy += 90 * dt; // gravity pull
+    ctx.beginPath();
+    ctx.arc(sp.x + b.dx, sp.y + b.dy, 0.9, 0, Math.PI * 2);
+    ctx.fill();
+   }
+  }
+ }
+
+ function drawRainMistRibbons(t, baseWind){
+  for(let m = 0; m < 2; m++){
+   const baseMistY = H * (0.32 + m * 0.18);
+   const speed = (0.04 + m * 0.02) * (baseWind >= 0 ? 1 : -0.7);
+   const grad = ctx.createLinearGradient(0, baseMistY - 32, 0, baseMistY + 40);
+   grad.addColorStop(0, 'rgba(215, 232, 230, 0)');
+   grad.addColorStop(0.5, m === 0 ? 'rgba(218, 234, 232, 0.16)' : 'rgba(224, 238, 235, 0.20)');
+   grad.addColorStop(1, 'rgba(215, 232, 230, 0)');
+
+   ctx.fillStyle = grad;
+   ctx.beginPath();
+   ctx.moveTo(-20, baseMistY);
+   for(let x = -20; x <= W + 20; x += 22){
+    const wave1 = Math.sin((x / W) * Math.PI * 2.8 + t * 0.65 + m * 2.1) * 12;
+    const wave2 = Math.cos((x / W) * Math.PI * 4.2 - t * 0.45) * 6;
+    ctx.lineTo(x, baseMistY + wave1 + wave2);
+   }
+   ctx.lineTo(W + 20, baseMistY + 54);
+   ctx.lineTo(-20, baseMistY + 54);
+   ctx.closePath();
+   ctx.fill();
+  }
+ }
+
+ function updateAndDrawGlassDrops(dt, t){
+  for(const gd of glassDrops){
+   gd.slideTimer -= dt;
+   if(gd.slideTimer <= 0){
+    const slideSpeed = 26;
+    gd.y += slideSpeed * dt;
+    gd.slideDist += slideSpeed * dt;
+    if(gd.slideDist > 16 + Math.random() * 22){
+     gd.slideTimer = 6 + Math.random() * 12;
+     gd.slideDist = 0;
+    }
+    if(gd.y > H - 50){
+     gd.y = 50 + Math.random() * 60;
+     gd.x = 20 + Math.random() * (W - 40);
+     gd.slideTimer = 4 + Math.random() * 8;
+    }
+   }
+
+   ctx.save();
+   // Faint water droplet corona
+   ctx.fillStyle = 'rgba(205, 230, 234, 0.16)';
+   ctx.beginPath();
+   ctx.arc(gd.x, gd.y, gd.r + 0.6, 0, Math.PI * 2);
+   ctx.fill();
+
+   // Core droplet body
+   ctx.fillStyle = 'rgba(238, 250, 252, 0.38)';
+   ctx.beginPath();
+   ctx.arc(gd.x, gd.y, gd.r, 0, Math.PI * 2);
+   ctx.fill();
+
+   // Specular glint
+   ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+   ctx.beginPath();
+   ctx.arc(gd.x - gd.r * 0.35, gd.y - gd.r * 0.35, gd.r * 0.38, 0, Math.PI * 2);
+   ctx.fill();
+   ctx.restore();
+  }
+ }
+
  function renderFrame(ts){
   if(!lastTs) lastTs = ts;
   const dt = Math.min(0.05, (ts - lastTs) / 1000);
@@ -3546,15 +3734,43 @@
 
   // 3. Drifting Clouds & Distant Songbirds
   if(!pal.isNight){
-   ctx.fillStyle = pal.isRain ? 'rgba(235, 240, 238, 0.35)' : 'rgba(255, 253, 245, 0.44)';
-   for(let c = 0; c < 3; c++){
-    const cx = ((c * 0.38 + t * (0.008 + c * 0.002)) % 1.3 - 0.15) * W + idlePanX * 0.3;
-    const cy = H * (0.11 + c * 0.045);
-    ctx.beginPath();
-    ctx.arc(cx, cy, 18, 0, Math.PI * 2);
-    ctx.arc(cx + 16, cy - 4, 22, 0, Math.PI * 2);
-    ctx.arc(cx + 34, cy, 16, 0, Math.PI * 2);
-    ctx.fill();
+   if(pal.isRain){
+    for(let c = 0; c < 4; c++){
+     const cx = ((c * 0.32 + t * (0.007 + c * 0.002)) % 1.3 - 0.15) * W + idlePanX * 0.28;
+     const cy = H * (0.10 + c * 0.04);
+
+     // Soft virga / distant rain curtains falling from cloud towards horizon
+     const virgaGrad = ctx.createLinearGradient(cx, cy, cx + (baseWind * 22), cy + 75);
+     virgaGrad.addColorStop(0, 'rgba(165, 188, 190, 0.18)');
+     virgaGrad.addColorStop(1, 'rgba(165, 188, 190, 0)');
+     ctx.fillStyle = virgaGrad;
+     ctx.beginPath();
+     ctx.moveTo(cx - 24, cy + 8);
+     ctx.lineTo(cx + (baseWind * 22) - 14, cy + 75);
+     ctx.lineTo(cx + (baseWind * 22) + 38, cy + 75);
+     ctx.lineTo(cx + 46, cy + 8);
+     ctx.closePath();
+     ctx.fill();
+
+     // Cloud silhouette
+     ctx.fillStyle = c % 2 === 0 ? 'rgba(162, 180, 182, 0.52)' : 'rgba(182, 198, 196, 0.44)';
+     ctx.beginPath();
+     ctx.arc(cx, cy, 22, 0, Math.PI * 2);
+     ctx.arc(cx + 18, cy - 6, 26, 0, Math.PI * 2);
+     ctx.arc(cx + 38, cy, 20, 0, Math.PI * 2);
+     ctx.fill();
+    }
+   } else {
+    ctx.fillStyle = 'rgba(255, 253, 245, 0.44)';
+    for(let c = 0; c < 3; c++){
+     const cx = ((c * 0.38 + t * (0.008 + c * 0.002)) % 1.3 - 0.15) * W + idlePanX * 0.3;
+     const cy = H * (0.11 + c * 0.045);
+     ctx.beginPath();
+     ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+     ctx.arc(cx + 16, cy - 4, 22, 0, Math.PI * 2);
+     ctx.arc(cx + 34, cy, 16, 0, Math.PI * 2);
+     ctx.fill();
+    }
    }
   }
 
@@ -3604,6 +3820,11 @@
   ctx.lineTo(-20, H);
   ctx.closePath();
   ctx.fill();
+
+  // 4b. Distant Background Rain Layer (falling behind the hill stack)
+  if(pal.isRain){
+   updateAndDrawRain(dt, t, baseWind, 0);
+  }
 
   // 5. Render All Cascading Hill Garden Cards from Back to Front (Painter's Order!)
   for(let i = hillCards.length - 1; i >= 0; i--){
@@ -3671,6 +3892,21 @@
   }
 
   // 7. Pond Ripples, Water Mist Droplets & Floating Petals
+  if(pal.isRain && frontHill && frontHill.pond && Math.random() < dt * 4.5){
+   const pose = getHillCardPose(frontHill);
+   const p = frontHill.pond;
+   const pondAngle = Math.random() * Math.PI * 2;
+   const pondDist = Math.random() * 0.72;
+   const localX = p.lx + Math.cos(pondAngle) * p.rx * pondDist;
+   const localY = p.ly + Math.sin(pondAngle) * p.ry * pondDist;
+   ripples.push({
+    x: W * 0.5 + pose.shiftX + (localX - W * 0.5) * pose.scale,
+    y: pose.crestY + localY * pose.scale,
+    r: 1.4,
+    maxR: 13 + Math.random() * 11,
+    alpha: 0.52 + Math.random() * 0.22
+   });
+  }
   for(let i = ripples.length - 1; i >= 0; i--){
    const rp = ripples[i];
    rp.r += 28 * dt;
@@ -3760,17 +3996,13 @@
 
   // 8. Gentle Rain or Golden Pollen / Fireflies
   if(pal.isRain){
-   ctx.strokeStyle = 'rgba(232, 242, 242, 0.34)';
-   ctx.lineWidth = 1.1;
-   for(let i = 0; i < 48; i++){
-    const rx = ((i * 47 + t * 95) % (W + 40)) - 20;
-    const ry = ((i * 83 + t * 420) % H);
-    ctx.beginPath();
-    ctx.moveTo(rx, ry);
-    ctx.lineTo(rx - 3, ry + 11);
-    ctx.stroke();
-   }
+   drawRainMistRibbons(t, baseWind);
+   updateAndDrawRain(dt, t, baseWind, 1);
+   updateAndDrawRainSplashes(dt);
+   updateAndDrawRain(dt, t, baseWind, 2);
+   updateAndDrawGlassDrops(dt, t);
   }else{
+   rainSplashes.length = 0;
    for(const m of motes){
     m.y -= (m.speed / H) * dt;
     m.x += Math.sin(t * 0.6 + m.phase) * 0.0004 + baseWind * 0.0012;
