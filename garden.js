@@ -24,9 +24,11 @@
  let petals = [];
  let butterflies = [];
  let birds = [];
- let rabbits = [];
+ let activeRabbits = [];
+ let rabbitSpawnTimer = 3;
  let deer = [];
  let perchBirds = [];
+ let dryLeaves = [];
  let seedPuffs = [];
  let lastTs = 0;
 
@@ -374,6 +376,9 @@
     trees: [],
     stones: [],
     tufts: [],
+    benches: [],
+    squirrel: null,
+    crow: null,
     seedPlot: null,
     plants: []
    };
@@ -499,6 +504,51 @@
     });
    }
 
+   // 5b. Random Hillside Garden Benches
+   if(hash(hSeed + 833) > 0.32 && !hill.cozyNook){
+    const bLy = usableMeadowTop + 0.44 * (usableMeadowBottom - usableMeadowTop) + (hash(hSeed + 841) - 0.5) * 32;
+    const bPathX = hillPathLocalX(hill, bLy);
+    const bSide = (idx % 2 === 0 ? 1 : -1) * (hill.pond ? (hill.pond.lx < W * 0.5 ? 1 : -1) : 1);
+    const bLx = Math.max(52, Math.min(W - 52, bPathX + bSide * (72 + hash(hSeed + 853) * 30)));
+    if(!hill.pond || Math.hypot((bLx - hill.pond.lx) / 1.5, bLy - hill.pond.ly) > hill.pond.rx + 24){
+     hill.benches.push({
+      lx: bLx,
+      ly: bLy,
+      rot: (hash(hSeed + 863) - 0.5) * 0.08
+     });
+    }
+   }
+
+   // 5c. Squirrel on hillside
+   const overdueInSubj = subjTopics.filter(t => !t.done && dueState(t) !== 'fresh').length;
+   const isHillWithering = subjTopics.length > 0 && (overdueInSubj / subjTopics.length >= 0.45);
+   if(!isHillWithering && hill.trees.length > 0 && hash(hSeed + 673) > 0.28){
+    const tr = hill.trees[0];
+    hill.squirrel = {
+     treeIdx: 0,
+     lx: tr.lx + (tr.lx < W * 0.5 ? 20 : -20),
+     ly: tr.ly + 4,
+     dir: tr.lx < W * 0.5 ? 1 : -1,
+     timer: 2 + hash(hSeed + 601) * 3,
+     eating: true,
+     scamperBoost: 0,
+     phase: hash(hSeed + 607) * Math.PI * 2
+    };
+   }
+
+   // 5d. Withering Crow (perched when hill is struggling/withering)
+   if(isHillWithering && hill.trees.length > 0){
+    const tr = hill.trees[1] || hill.trees[0];
+    hill.crow = {
+     lx: tr.lx + (tr.lx < W * 0.5 ? -4 : 4),
+     ly: tr.ly - 44 * tr.scale,
+     caw: 0,
+     lookDir: 1,
+     timer: 2 + hash(hSeed + 907) * 3,
+     phase: hash(hSeed + 911) * Math.PI * 2
+    };
+   }
+
    // 6. Topic Plants (or Tilled Seed Plot if 0 topics yet)
    const count = subjTopics.length;
    if(count === 0){
@@ -597,79 +647,48 @@
   renderHillChipsAndRail();
   syncActiveHillHUD();
 
-  // Sync Butterflies & Birds
-  const desiredButterflies = completed >= 1 ? Math.min(6, 1 + Math.floor(completed / 3)) : 1;
+  // Check overall garden withering state
+  const overdueAll = topics.filter(t => !t.done && dueState(t) !== 'fresh').length;
+  const deadAll = topics.filter(t => !t.done && dueState(t) === 'dead').length;
+  const isGardenWithering = topics.length > 0 && (overdueAll / topics.length >= 0.35 || deadAll >= 2);
+
+  // Sync Butterflies (exactly as original: 2 alternating colors, reduced only if severely withering)
+  const desiredButterflies = isGardenWithering ? (completed >= 3 ? 1 : 0) : (completed >= 1 ? Math.min(6, 1 + Math.floor(completed / 3)) : 1);
   while(butterflies.length < desiredButterflies){
-   const tints = ['#e8b698', '#dfc994', '#c8d8a0', '#b8c8e8', '#e8c8d8'];
    butterflies.push({
     x: W * (0.2 + Math.random() * 0.6),
     y: H * (0.44 + Math.random() * 0.34),
     vx: (Math.random() - 0.5) * 32,
     vy: (Math.random() - 0.5) * 20,
     phase: Math.random() * Math.PI * 2,
-    tint: tints[butterflies.length % tints.length],
-    size: 0.8 + Math.random() * 0.5,
+    tint: butterflies.length % 2 === 0 ? '#e8b698' : '#dfc994',
     targetId: null,
     restTimer: 0
    });
   }
   while(butterflies.length > desiredButterflies) butterflies.pop();
 
-  // Sky birds — scaled by total blooms across all hills
+  // Sky birds — reflect biodiversity and withering
   const totalBlooms = hillCards.reduce((s, h) => s + h.bloomCount, 0);
-  const desiredBirds = totalBlooms >= 2 ? Math.min(7, 1 + Math.floor(totalBlooms / 2)) : (completed >= 1 ? 1 : 0);
-  const birdSpecies = ['sparrow', 'swallow', 'finch', 'crow', 'starling', 'swallow'];
+  const desiredBirds = isGardenWithering ? 2 : (totalBlooms >= 2 ? Math.min(6, 1 + Math.floor(totalBlooms / 2)) : (completed >= 1 ? 1 : 0));
+  const birdSpecies = isGardenWithering ? ['crow', 'crow'] : ['sparrow', 'swallow', 'finch', 'swallow'];
   while(birds.length < desiredBirds){
    const sp = birdSpecies[birds.length % birdSpecies.length];
    birds.push({
     x: 0.05 + Math.random() * 0.9,
     y: 0.07 + Math.random() * 0.14,
-    speed: sp === 'swallow' ? 0.038 + Math.random() * 0.022 : sp === 'crow' ? 0.013 + Math.random() * 0.009 : 0.019 + Math.random() * 0.016,
+    speed: sp === 'crow' ? 0.014 + Math.random() * 0.008 : 0.022 + Math.random() * 0.018,
     phase: Math.random() * Math.PI * 2,
     species: sp,
-    wingbeat: sp === 'swallow' ? 11 : sp === 'crow' ? 4.2 : 7.5,
-    size: sp === 'crow' ? 1.65 : sp === 'swallow' ? 0.88 : 1.0,
-    color: sp === 'crow' ? 'rgba(42,52,46,0.62)' : sp === 'starling' ? 'rgba(55,68,80,0.52)' : 'rgba(72,92,74,0.48)',
-    flockLeader: birds.length > 0 && Math.random() < 0.42 ? birds.length - 1 : -1
+    size: sp === 'crow' ? 1.5 : 1.0,
+    color: sp === 'crow' ? 'rgba(42,50,46,0.65)' : 'rgba(72,92,74,0.48)'
    });
   }
   while(birds.length > desiredBirds) birds.pop();
 
-  // Rabbits — per-hill, based on health ratio
-  while(rabbits.length < hillCards.length) rabbits.push([]);
-  rabbits.length = hillCards.length;
-  hillCards.forEach((hill, hi) => {
-   const healthRatio = hill.totalCount > 0 ? hill.bloomCount / hill.totalCount : 0;
-   const desiredR = healthRatio >= 0.6 ? 2 : healthRatio >= 0.25 ? 1 : 0;
-   if(!Array.isArray(rabbits[hi])) rabbits[hi] = [];
-   const rab = rabbits[hi];
-   const hSeed = hill.crestSeed;
-   const rabColors = ['#c8b89a', '#b0a080', '#d8cbb0', '#a89070'];
-   while(rab.length < desiredR){
-    const side = rab.length % 2 === 0 ? -1 : 1;
-    const startLy = 55 + hash(hSeed + rab.length * 71) * 110;
-    const startLx = hillPathLocalX(hill, startLy) + side * (38 + hash(hSeed + rab.length * 53) * 52);
-    rab.push({
-     lx: Math.max(24, Math.min(W - 24, startLx)),
-     ly: startLy,
-     vx: 0,
-     phase: hash(hSeed + rab.length * 61) * Math.PI * 2,
-     hopTimer: hash(hSeed + rab.length * 43) * 3,
-     hopPhase: 0,
-     hopAmp: 0,
-     dir: side,
-     sitting: true,
-     earPerk: 0,
-     color: rabColors[hi % rabColors.length],
-     hillIndex: hi
-    });
-   }
-   while(rab.length > desiredR) rab.pop();
-  });
-
-  // Deer — rare, appears when garden is very flourishing (8+ healthy blooms)
-  const totalHealthy = hillCards.reduce((s, h) => s + h.bloomCount, 0);
-  const desiredDeer = totalHealthy >= 8 ? 1 : 0;
+  // Deer — prestigious sight on thriving, non-withering gardens
+  const totalHealthyBlooms = hillCards.reduce((s, h) => s + h.bloomCount, 0);
+  const desiredDeer = (!isGardenWithering && totalHealthyBlooms >= 8) ? 1 : 0;
   while(deer.length < desiredDeer){
    const hi = Math.max(0, Math.min(hillCards.length - 1, Math.round(activeHillPos)));
    const hill = hillCards[hi] || hillCards[0];
@@ -682,21 +701,20 @@
     phase: Math.random() * Math.PI * 2,
     graze: 0,
     gazeTimer: 2 + Math.random() * 4,
-    fleeing: false,
     hillIndex: hi
    });
   }
   while(deer.length > desiredDeer) deer.pop();
 
-  // Perched birds — sit on lanterns/trees when garden has blooms
-  const desiredPerch = Math.min(4, Math.floor(totalBlooms / 3));
+  // Perched songbirds (only on healthy hills)
+  const desiredPerch = (!isGardenWithering && totalBlooms >= 3) ? Math.min(3, Math.floor(totalBlooms / 3)) : 0;
   while(perchBirds.length < desiredPerch){
    perchBirds.push({
     hillIndex: perchBirds.length % Math.max(1, hillCards.length),
     onLantern: perchBirds.length % 2 === 0,
     treeIdx: perchBirds.length % 3,
     phase: Math.random() * Math.PI * 2,
-    color: perchBirds.length % 4 === 0 ? '#d4903a' : perchBirds.length % 4 === 1 ? '#7a9476' : perchBirds.length % 4 === 2 ? '#b08090' : '#6a8098',
+    color: perchBirds.length % 3 === 0 ? '#d4903a' : perchBirds.length % 3 === 1 ? '#7a9476' : '#6a8098',
     chirpTimer: Math.random() * 5,
     singing: false,
     wingFlap: 0
@@ -1116,10 +1134,54 @@
   for(const tr of frontHill.trees){
    if(Math.hypot(lx - tr.lx, ly - (tr.ly - 24 * tr.scale)) < 34){
     tr.shake = 1;
+    if(frontHill.squirrel){
+     frontHill.squirrel.scamperBoost = 2.5;
+     frontHill.squirrel.dir *= -1;
+    }
     const leafCol = tr.kind === 'sakura' ? '#f5c2ca' : tr.kind === 'maple' ? '#d98a5f' : tr.kind === 'golden_oak' ? '#f0cf78' : '#9bb88c';
     spawnPetals(sx, sy - 16, leafCol, 8);
     return;
    }
+  }
+
+  // 8. Hit-test Rabbits (sprints away startled when tapped!)
+  for(const rb of activeRabbits){
+   if(Math.hypot(lx - rb.lx, ly - rb.ly) < 32){
+    rb.state = 'sprint';
+    rb.dir = (lx < rb.lx ? 1 : -1);
+    rb.speed = 125;
+    rb.stateTimer = 2.4;
+    spawnPetals(sx, sy - 10, '#f2e8dc', 5);
+    showWhisper('A startled rabbit sprints across the meadow! 🐇💨');
+    return;
+   }
+  }
+
+  // 9. Hit-test Squirrel
+  if(frontHill.squirrel && Math.hypot(lx - frontHill.squirrel.lx, ly - frontHill.squirrel.ly) < 30){
+   frontHill.squirrel.scamperBoost = 2.0;
+   frontHill.squirrel.dir *= -1;
+   spawnPetals(sx, sy - 10, '#d98b58', 4);
+   showWhisper('A curious squirrel twitches its bushy tail! 🐿️');
+   return;
+  }
+
+  // 10. Hit-test Garden Bench
+  if(frontHill.benches){
+   for(const bn of frontHill.benches){
+    if(Math.hypot(lx - bn.lx, ly - bn.ly) < 32){
+     spawnPetals(sx, sy - 10, '#eedbb5', 4);
+     showWhisper('A peaceful garden bench to sit and pause 🪑');
+     return;
+    }
+   }
+  }
+
+  // 11. Hit-test Withering Crow
+  if(frontHill.crow && Math.hypot(lx - frontHill.crow.lx, ly - frontHill.crow.ly) < 28){
+   frontHill.crow.caw = 1;
+   showWhisper('A solitary raven watches over the withered garden... revisits will revive the bloom 🪶');
+   return;
   }
 
   // 8. Gentle breeze & biome petals
@@ -1379,10 +1441,12 @@
   if(hill.cozyNook) drawCozyNook(hill.cozyNook, pal, t);
   if(hill.seedPlot && !isBackgroundPeek) drawSeedBedPlot(hill.seedPlot, pal, t);
 
-  // 7. Depth-Sorted Trees, Stone Lantern & Topic Plants on this Hill
+  // 7. Depth-Sorted Trees, Lantern, Benches, Squirrels & Topic Plants
   const renderables = [
    ...hill.trees.map(tr => ({ kind: 'tree', y: tr.ly, obj: tr })),
    ...(hill.lantern ? [{ kind: 'lantern', y: hill.lantern.ly, obj: hill.lantern }] : []),
+   ...(hill.benches || []).map(bn => ({ kind: 'bench', y: bn.ly, obj: bn })),
+   ...(hill.squirrel ? [{ kind: 'squirrel', y: hill.squirrel.ly, obj: hill.squirrel }] : []),
    ...hill.plants.map(p => ({ kind: 'plant', y: p.ly, obj: p }))
   ];
   renderables.sort((a, b) => a.y - b.y);
@@ -1390,16 +1454,23 @@
   for(const item of renderables){
    if(item.kind === 'tree') drawSanctuaryTree(item.obj, pal, t, baseWind, dt);
    else if(item.kind === 'lantern') drawStoneLantern(item.obj, pal, t);
+   else if(item.kind === 'bench') drawGardenBench(item.obj, pal, t);
+   else if(item.kind === 'squirrel') drawSquirrel(item.obj, hill, pal, t, dt);
    else drawBotanicalPlant(item.obj, t, baseWind, dt);
+  }
+
+  if(hill.crow && !isBackgroundPeek){
+   drawWitheringCrow(hill.crow, pal, t, dt);
   }
 
   if(hill.dragonfly && hill.pond && !isBackgroundPeek){
    drawDragonfly(hill.dragonfly, hill.pond, t);
   }
 
-  // Rabbits on this hill (only on front card, not peek)
-  if(!isBackgroundPeek && Array.isArray(rabbits[hill.index])){
-   for(const rb of rabbits[hill.index]){
+  // Rabbits coming and going on the active front hill
+  const frontCardIdx = Math.max(0, Math.min(hillCards.length - 1, Math.round(activeHillPos)));
+  if(!isBackgroundPeek && hill.index === frontCardIdx){
+   for(const rb of activeRabbits){
     drawRabbit(rb, t, dt, pal);
    }
   }
@@ -2218,86 +2289,419 @@
  }
 
 
- // ── Rabbit ───────────────────────────────────────────────────────────────
- function drawRabbit(rb, t, dt, pal){
-  rb.hopTimer -= dt;
-  if(rb.hopTimer <= 0){
-   rb.sitting = !rb.sitting;
-   if(!rb.sitting){
-    rb.hopPhase = 0;
-    rb.hopAmp = 1;
-    rb.vx = rb.dir * (14 + Math.random() * 18);
-    rb.hopTimer = 0.38 + Math.random() * 0.3;
-   }else{
-    rb.vx = 0;
-    rb.hopTimer = 1.2 + Math.random() * 2.5;
-    if(Math.random() < 0.4) rb.dir *= -1;
+ // ── Rabbit (Coming & Going, Sprinting & Grazing) ────────────────────────
+ function updateActiveRabbits(dt, t){
+  const totalHealthyFlowers = topics.filter(t => !t.paused && (dueState(t) === 'fresh') && (t.level || 0) >= 1).length;
+  const overdueCount = topics.filter(t => !t.done && dueState(t) !== 'fresh').length;
+  const deadCount = topics.filter(t => !t.done && dueState(t) === 'dead').length;
+  const isWithering = (topics.length > 0 && overdueCount / topics.length >= 0.35) || deadCount >= 2;
+  const rabbitThreshold = 9 + Math.floor(hash(missionSeed() + 773) * 4); // min ~10 randomised (9..12)
+
+  const canHaveRabbits = totalHealthyFlowers >= rabbitThreshold && !isWithering;
+  const maxRabbits = canHaveRabbits ? (totalHealthyFlowers >= rabbitThreshold + 6 ? 3 : totalHealthyFlowers >= rabbitThreshold + 2 ? 2 : 1) : 0;
+
+  rabbitSpawnTimer -= dt;
+  if(canHaveRabbits && activeRabbits.length < maxRabbits && rabbitSpawnTimer <= 0){
+   rabbitSpawnTimer = 4 + Math.random() * 7;
+   const enterFromLeft = Math.random() < 0.5;
+   activeRabbits.push({
+    lx: enterFromLeft ? -24 : W + 24,
+    ly: 62 + Math.random() * 95,
+    dir: enterFromLeft ? 1 : -1,
+    state: 'enter', // 'enter', 'nibble', 'hop', 'sprint', 'leave'
+    stateTimer: 3,
+    targetLx: W * (0.2 + Math.random() * 0.6),
+    speed: 36,
+    hopPhase: 0,
+    hopAmp: 0,
+    lifetime: 0,
+    maxStay: 14 + Math.random() * 16,
+    color: ['#c4b496', '#ad9c81', '#d4c8b2', '#9a846c'][Math.floor(Math.random() * 4)],
+    earPerk: 1
+   });
+  }
+
+  for(let i = activeRabbits.length - 1; i >= 0; i--){
+   const rb = activeRabbits[i];
+   rb.lifetime += dt;
+
+   // If garden withers or time up, rabbit heads off-campus
+   if(rb.lifetime > rb.maxStay || !canHaveRabbits){
+    if(rb.state !== 'leave'){
+     rb.state = 'leave';
+     rb.dir = (rb.lx < W * 0.5 ? -1 : 1);
+     rb.speed = canHaveRabbits ? 48 : 105; // startled sprint if withering!
+    }
+   }
+
+   rb.stateTimer -= dt;
+
+   if(rb.state === 'enter'){
+    rb.speed = 36;
+    rb.lx += rb.dir * rb.speed * dt;
+    rb.hopPhase = (rb.hopPhase + dt * 4.2) % 1;
+    rb.hopAmp = Math.sin(rb.hopPhase * Math.PI);
+    if((rb.dir > 0 && rb.lx >= rb.targetLx) || (rb.dir < 0 && rb.lx <= rb.targetLx)){
+     rb.state = 'nibble';
+     rb.stateTimer = 1.8 + Math.random() * 2.4;
+     rb.hopAmp = 0;
+    }
+   } else if(rb.state === 'nibble'){
+    rb.hopAmp = 0;
+    if(rb.stateTimer <= 0){
+     const roll = Math.random();
+     if(roll < 0.35){
+      rb.state = 'hop';
+      rb.stateTimer = 1.6 + Math.random() * 2.2;
+      rb.dir = Math.random() < 0.5 ? -1 : 1;
+      rb.speed = 28 + Math.random() * 16;
+     } else if(roll < 0.68){
+      // SPRINT! Random energetic sprint burst across the meadow!
+      rb.state = 'sprint';
+      rb.stateTimer = 1.2 + Math.random() * 1.8;
+      rb.dir = (rb.lx < 60 ? 1 : rb.lx > W - 60 ? -1 : (Math.random() < 0.5 ? 1 : -1));
+      rb.speed = 98 + Math.random() * 38;
+     } else {
+      rb.state = 'nibble';
+      rb.stateTimer = 1.5 + Math.random() * 2;
+     }
+    }
+   } else if(rb.state === 'hop'){
+    rb.lx += rb.dir * rb.speed * dt;
+    rb.hopPhase = (rb.hopPhase + dt * 4.0) % 1;
+    rb.hopAmp = Math.sin(rb.hopPhase * Math.PI);
+    if(rb.lx < 28){ rb.lx = 28; rb.dir = 1; }
+    if(rb.lx > W - 28){ rb.lx = W - 28; rb.dir = -1; }
+    if(rb.stateTimer <= 0){
+     rb.state = 'nibble';
+     rb.stateTimer = 2 + Math.random() * 2;
+     rb.hopAmp = 0;
+    }
+   } else if(rb.state === 'sprint'){
+    // Rapid bounding sprint!
+    rb.lx += rb.dir * rb.speed * dt;
+    rb.hopPhase = (rb.hopPhase + dt * 8.6) % 1; // rapid hops!
+    rb.hopAmp = Math.sin(rb.hopPhase * Math.PI);
+    if(rb.lx < 24){ rb.lx = 24; rb.dir = 1; }
+    if(rb.lx > W - 24){ rb.lx = W - 24; rb.dir = -1; }
+    if(rb.stateTimer <= 0){
+     rb.state = 'nibble';
+     rb.stateTimer = 1.8 + Math.random() * 2.2;
+     rb.hopAmp = 0;
+    }
+   } else if(rb.state === 'leave'){
+    rb.lx += rb.dir * rb.speed * dt;
+    const isFast = rb.speed > 60;
+    rb.hopPhase = (rb.hopPhase + dt * (isFast ? 8.2 : 4.4)) % 1;
+    rb.hopAmp = Math.sin(rb.hopPhase * Math.PI);
+    // Left the campus!
+    if(rb.lx < -34 || rb.lx > W + 34){
+     activeRabbits.splice(i, 1);
+    }
    }
   }
-  if(!rb.sitting){
-   rb.hopPhase = Math.min(1, rb.hopPhase + dt / 0.38);
-   rb.hopAmp = Math.sin(rb.hopPhase * Math.PI);
-   rb.lx += rb.vx * dt;
-   if(rb.lx < 22){ rb.lx = 22; rb.dir = 1; }
-   if(rb.lx > W - 22){ rb.lx = W - 22; rb.dir = -1; }
-  }
-  const bodyY = -rb.hopAmp * 7;
-  const earPerk = rb.sitting ? 1 : rb.hopAmp;
+ }
+
+ function drawRabbit(rb, t, dt, pal){
+  const isSprinting = rb.state === 'sprint' || (rb.state === 'leave' && rb.speed > 60);
+  const isSitting = rb.state === 'nibble';
+  const bodyY = -rb.hopAmp * (isSprinting ? 9 : 6);
   const col = rb.color;
   const belly = pal.isNight ? '#7a6e62' : '#e8dcc8';
   const shadow = pal.isNight ? 'rgba(16,28,22,0.28)' : 'rgba(28,46,28,0.18)';
+
   ctx.save();
   ctx.translate(rb.lx, rb.ly + bodyY);
+
+  // Shadow
   ctx.fillStyle = shadow;
   ctx.beginPath();
-  ctx.ellipse(0, 2, 10, 3, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 2, isSprinting ? 12 : 9, 3, 0, 0, Math.PI * 2);
   ctx.fill();
+
+  // Body (stretched when sprinting)
   ctx.fillStyle = col;
   ctx.beginPath();
-  ctx.ellipse(0, 0, 7, 5.5, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 0, isSprinting ? 9 : 7, isSprinting ? 4.5 : 5.5, isSprinting ? -rb.dir * 0.15 : 0, 0, Math.PI * 2);
   ctx.fill();
+
+  // Belly
   ctx.fillStyle = belly;
   ctx.beginPath();
-  ctx.ellipse(1.5, 0.5, 4, 3.2, 0.1, 0, Math.PI * 2);
+  ctx.ellipse(rb.dir * 1.5, 0.5, 4, 3.2, 0.1, 0, Math.PI * 2);
   ctx.fill();
+
+  // Fluffy Tail
   ctx.fillStyle = belly;
   ctx.beginPath();
-  ctx.arc(-7.5, 0.5, 3.0, 0, Math.PI * 2);
+  ctx.arc(-rb.dir * (isSprinting ? 9 : 7.5), 0.5, 3.0, 0, Math.PI * 2);
   ctx.fill();
+
+  // Head
   ctx.fillStyle = col;
   ctx.beginPath();
-  ctx.ellipse(rb.dir * 6, -4, 4.4, 4, 0, 0, Math.PI * 2);
+  ctx.ellipse(rb.dir * (isSprinting ? 7.5 : 6), -4, 4.4, 4, 0, 0, Math.PI * 2);
   ctx.fill();
+
+  // Eye
   ctx.fillStyle = pal.isNight ? '#c08080' : '#3c2820';
   ctx.beginPath();
-  ctx.arc(rb.dir * 7.5, -5, 1.1, 0, Math.PI * 2);
+  ctx.arc(rb.dir * (isSprinting ? 9 : 7.5), -5, 1.1, 0, Math.PI * 2);
   ctx.fill();
-  const earLean = rb.sitting ? 0 : rb.dir * 0.3;
+
+  // Ears (laid back when sprinting, upright and twitching when sitting)
+  const earLean = isSprinting ? -rb.dir * 0.72 : (isSitting ? rb.dir * 0.08 + Math.sin(t * 8) * 0.06 : rb.dir * 0.25);
+  const earLen = isSprinting ? 3.6 : 4.6;
+
   ctx.fillStyle = col;
   ctx.save();
   ctx.translate(rb.dir * 5, -8);
-  ctx.rotate(earLean - rb.dir * 0.1);
+  ctx.rotate(earLean);
   ctx.beginPath();
-  ctx.ellipse(0, -4 * earPerk, 1.6, 4.5 * earPerk, earLean, 0, Math.PI * 2);
+  ctx.ellipse(0, -earLen * 0.8, 1.5, earLen, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = pal.isNight ? '#7a5a60' : '#e8aab0';
   ctx.beginPath();
-  ctx.ellipse(0, -3.5 * earPerk, 0.7, 3.2 * earPerk, earLean, 0, Math.PI * 2);
+  ctx.ellipse(0, -earLen * 0.75, 0.7, earLen * 0.7, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
+
+  // Second ear
   ctx.fillStyle = col;
   ctx.save();
   ctx.translate(rb.dir * 6.5, -8);
-  ctx.rotate(earLean + rb.dir * 0.18);
+  ctx.rotate(earLean + rb.dir * 0.16);
   ctx.beginPath();
-  ctx.ellipse(0, -3.5 * earPerk, 1.4, 3.8 * earPerk, earLean + 0.1, 0, Math.PI * 2);
+  ctx.ellipse(0, -earLen * 0.75, 1.3, earLen * 0.9, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
+
+  // Paws
   ctx.fillStyle = col;
   ctx.beginPath();
-  ctx.ellipse(rb.dir * 3.5, 4.5, 2.4, 1.4, 0, 0, Math.PI * 2);
-  ctx.ellipse(rb.dir * 6.5, 4.5, 2.4, 1.4, 0, 0, Math.PI * 2);
+  ctx.ellipse(rb.dir * (isSprinting ? 6 : 3.5), 4.2, 2.4, 1.4, isSprinting ? 0.3 : 0, 0, Math.PI * 2);
+  ctx.ellipse(rb.dir * (isSprinting ? 9 : 6.5), 4.2, 2.4, 1.4, isSprinting ? 0.3 : 0, 0, Math.PI * 2);
   ctx.fill();
+
+  ctx.restore();
+ }
+
+ // ── Squirrel ─────────────────────────────────────────────────────────────
+ function drawSquirrel(sq, hill, pal, t, dt){
+  sq.timer -= dt;
+  if(sq.scamperBoost > 0) sq.scamperBoost = Math.max(0, sq.scamperBoost - dt * 1.5);
+  if(sq.timer <= 0){
+   sq.timer = 2 + Math.random() * 3.5;
+   sq.eating = Math.random() < 0.6;
+   if(!sq.eating){
+    sq.dir *= -1;
+   }
+  }
+
+  const col = pal.isNight ? '#62412e' : '#b25e32';
+  const belly = pal.isNight ? '#e2d6c6' : '#fcf4ea';
+  const shadow = pal.isNight ? 'rgba(16,26,20,0.25)' : 'rgba(28,42,28,0.18)';
+  const twitch = Math.sin(t * 7 + sq.phase) * (sq.eating ? 0.12 : 0.05);
+
+  ctx.save();
+  ctx.translate(sq.lx, sq.ly);
+  ctx.scale(sq.dir, 1);
+
+  // Shadow
+  ctx.fillStyle = shadow;
+  ctx.beginPath();
+  ctx.ellipse(0, 3, 9, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Bushy S-curved Tail
+  ctx.save();
+  ctx.translate(-4, -1);
+  ctx.rotate(twitch);
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.quadraticCurveTo(-10, -5, -8, -14);
+  ctx.quadraticCurveTo(-6, -20, 2, -18);
+  ctx.quadraticCurveTo(8, -16, 6, -10);
+  ctx.quadraticCurveTo(4, -4, 0, 0);
+  ctx.fill();
+
+  ctx.fillStyle = pal.isNight ? '#7a5440' : '#c9784a';
+  ctx.beginPath();
+  ctx.ellipse(-2, -12, 3.5, 6, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Body
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.ellipse(1, -3, 4.8, 6, 0.25, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Cream Belly
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.ellipse(3, -2.5, 2.5, 4.5, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Head
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.arc(4, -9, 3.4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Ear with tuft
+  ctx.beginPath();
+  ctx.moveTo(3, -12);
+  ctx.lineTo(4.5, -15.5);
+  ctx.lineTo(6, -12);
+  ctx.closePath();
+  ctx.fill();
+
+  // Eye
+  ctx.fillStyle = pal.isNight ? '#c09880' : '#1e140e';
+  ctx.beginPath();
+  ctx.arc(4.8, -9.5, 0.9, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Paws
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.ellipse(4.5, -4.5, 1.8, 1.2, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  if(sq.eating){
+   // Acorn / seed
+   ctx.fillStyle = pal.isNight ? '#785b3a' : '#8e5927';
+   ctx.beginPath();
+   ctx.ellipse(6.2, -4.8, 1.6, 2.2, 0.3, 0, Math.PI * 2);
+   ctx.fill();
+  }
+
+  ctx.restore();
+ }
+
+ // ── Garden Bench ─────────────────────────────────────────────────────────
+ function drawGardenBench(bn, pal, t){
+  ctx.save();
+  ctx.translate(bn.lx, bn.ly);
+  ctx.rotate(bn.rot || 0);
+
+  // Shadow
+  ctx.fillStyle = pal.isNight ? 'rgba(16,28,22,0.28)' : 'rgba(30,48,32,0.18)';
+  ctx.beginPath();
+  ctx.ellipse(0, 6.5, 22, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const ironCol = pal.isNight ? '#3a3e3b' : '#464a44';
+  const woodBack = pal.isNight ? '#4e3f32' : '#8c6544';
+  const woodFront = pal.isNight ? '#635141' : '#ad8058';
+  const woodHi = pal.isNight ? '#776250' : '#c4966e';
+
+  // Metal / iron side frames & legs
+  ctx.strokeStyle = ironCol;
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = 'round';
+
+  ctx.beginPath();
+  ctx.moveTo(-15, -12);
+  ctx.quadraticCurveTo(-17, -4, -16, 6);
+  ctx.moveTo(-17, -3);
+  ctx.lineTo(-11, -3);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(15, -12);
+  ctx.quadraticCurveTo(17, -4, 16, 6);
+  ctx.moveTo(17, -3);
+  ctx.lineTo(11, -3);
+  ctx.stroke();
+
+  // Wooden backrest slats
+  ctx.fillStyle = woodBack;
+  drawRoundedRect(-14.5, -11, 29, 3.2, 1);
+  ctx.fill();
+  drawRoundedRect(-14.5, -6.5, 29, 3.2, 1);
+  ctx.fill();
+
+  // Wooden seat planks
+  ctx.fillStyle = woodFront;
+  drawRoundedRect(-15.5, -1.5, 31, 3.4, 1.2);
+  ctx.fill();
+  ctx.fillStyle = woodHi;
+  drawRoundedRect(-15.5, 2.5, 31, 3.2, 1.2);
+  ctx.fill();
+
+  ctx.restore();
+ }
+
+ // ── Withering Crow ───────────────────────────────────────────────────────
+ function drawWitheringCrow(crow, pal, t, dt){
+  crow.timer -= dt;
+  if(crow.caw > 0) crow.caw = Math.max(0, crow.caw - dt * 2);
+  if(crow.timer <= 0){
+   crow.timer = 2.5 + Math.random() * 4;
+   crow.lookDir = Math.random() < 0.5 ? -1 : 1;
+  }
+
+  ctx.save();
+  ctx.translate(crow.lx, crow.ly);
+  ctx.scale(crow.lookDir, 1);
+
+  const featherDark = pal.isNight ? '#1c2220' : '#272d2a';
+  const featherHi = pal.isNight ? '#2e3834' : '#3d4742';
+  const beakCol = pal.isNight ? '#181b19' : '#1e211f';
+
+  // Shadow
+  ctx.fillStyle = 'rgba(12,20,16,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1.5, 6, 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Tail
+  ctx.fillStyle = featherDark;
+  ctx.beginPath();
+  ctx.moveTo(-3, 2);
+  ctx.lineTo(-9, 9);
+  ctx.lineTo(-4, 9);
+  ctx.lineTo(-1, 4);
+  ctx.closePath();
+  ctx.fill();
+
+  // Body
+  ctx.fillStyle = featherDark;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 4.8, 3.6, 0.25, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Wing
+  ctx.fillStyle = featherHi;
+  ctx.beginPath();
+  ctx.ellipse(-1, -0.5, 4.2, 2.5, 0.35, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Head
+  ctx.fillStyle = featherDark;
+  ctx.beginPath();
+  ctx.arc(3.5, -4.5, 2.8, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Beak
+  ctx.fillStyle = beakCol;
+  const openBeak = crow.caw > 0 ? 1.5 : 0;
+  ctx.beginPath();
+  ctx.moveTo(5.5, -5.2);
+  ctx.lineTo(9.5, -4.2 + openBeak * 0.4);
+  ctx.lineTo(5.5, -3.4 + openBeak);
+  ctx.closePath();
+  ctx.fill();
+
+  // Eye
+  ctx.fillStyle = '#65736c';
+  ctx.beginPath();
+  ctx.arc(4.2, -5.2, 0.7, 0, Math.PI * 2);
+  ctx.fill();
+
   ctx.restore();
  }
 
@@ -2509,6 +2913,7 @@
   }
 
   syncActiveHillHUD();
+  updateActiveRabbits(dt, t);
 
   windTarget *= Math.pow(0.95, dt * 60);
   windGust += (windTarget - windGust) * Math.min(1, dt * 4.5);
@@ -2687,26 +3092,12 @@
 
     const flapSpeed = bf.restTimer > 0 ? 4 : 15;
     const flap = 0.25 + 0.75 * Math.abs(Math.sin(t * flapSpeed + bf.phase));
-    const bfSz = bf.size || 1.0;
     ctx.save();
     ctx.translate(bf.x, bf.y);
-    // upper wings
     ctx.fillStyle = bf.tint;
     ctx.beginPath();
-    ctx.ellipse(-3.5 * flap * bfSz, -1, 4.4 * flap * bfSz, 3.1 * bfSz, -0.35, 0, Math.PI * 2);
-    ctx.ellipse(3.5 * flap * bfSz, -1, 4.4 * flap * bfSz, 3.1 * bfSz, 0.35, 0, Math.PI * 2);
-    ctx.fill();
-    // lower hindwings (slightly smaller, different shade)
-    ctx.globalAlpha = 0.72;
-    ctx.beginPath();
-    ctx.ellipse(-2.8 * flap * bfSz, 1.8, 3.2 * flap * bfSz, 2.0 * bfSz, -0.5, 0, Math.PI * 2);
-    ctx.ellipse(2.8 * flap * bfSz, 1.8, 3.2 * flap * bfSz, 2.0 * bfSz, 0.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    // body
-    ctx.fillStyle = 'rgba(60,46,36,0.75)';
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 0.9 * bfSz, 3.4 * bfSz, 0, 0, Math.PI * 2);
+    ctx.ellipse(-3.5 * flap, -1, 4.4 * flap, 3.1, -0.35, 0, Math.PI * 2);
+    ctx.ellipse(3.5 * flap, -1, 4.4 * flap, 3.1, 0.35, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
    }
@@ -2761,6 +3152,43 @@
    ctx.ellipse(0, 0, 4.2, 2.2, 0, 0, Math.PI * 2);
    ctx.fill();
    ctx.restore();
+  }
+
+
+  // Drifting dry leaves when garden is withering
+  const overdueForLeaves = topics.filter(t => !t.done && dueState(t) !== 'fresh').length;
+  const isLeavesWithering = topics.length > 0 && (overdueForLeaves / topics.length >= 0.35);
+  if(isLeavesWithering){
+   while(dryLeaves.length < 10){
+    dryLeaves.push({
+     x: Math.random() * W,
+     y: Math.random() * H * 0.7,
+     vx: 14 + Math.random() * 22,
+     vy: 18 + Math.random() * 24,
+     rot: Math.random() * Math.PI * 2,
+     vrot: (Math.random() - 0.5) * 2.8,
+     color: ['#8e6b48', '#a67d53', '#7a5a3a', '#946f49'][Math.floor(Math.random() * 4)],
+     size: 2.8 + Math.random() * 2.0
+    });
+   }
+   for(const dl of dryLeaves){
+    dl.x += (dl.vx + baseWind * 26) * dt;
+    dl.y += dl.vy * dt;
+    dl.rot += dl.vrot * dt;
+    if(dl.x > W + 20) dl.x = -20;
+    if(dl.x < -20) dl.x = W + 20;
+    if(dl.y > H + 20) dl.y = -20;
+    ctx.save();
+    ctx.translate(dl.x, dl.y);
+    ctx.rotate(dl.rot);
+    ctx.fillStyle = dl.color;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, dl.size * 1.5, dl.size * 0.75, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+   }
+  } else {
+   dryLeaves.length = 0;
   }
 
   // 8. Gentle Rain or Golden Pollen / Fireflies
