@@ -1334,6 +1334,7 @@ function pushModalHistory(type){
 
 function hasAnyModalOpen(){
  return !!(
+  document.getElementById('remindersModal')?.classList.contains('open') ||
   document.getElementById('replantModal')?.classList.contains('open') ||
   document.getElementById('topicDeleteModal')?.classList.contains('open') ||
   document.getElementById('subjectDeleteModal')?.classList.contains('open') ||
@@ -1345,6 +1346,7 @@ function hasAnyModalOpen(){
 }
 
 function closeAllModals(){
+ if(typeof closeRemindersModal === 'function') closeRemindersModal();
  if(typeof closeReplantModal === 'function') closeReplantModal();
  if(typeof closeTopicDeleteModal === 'function') closeTopicDeleteModal();
  if(typeof closeSubjectDeleteModal === 'function') closeSubjectDeleteModal();
@@ -1401,3 +1403,277 @@ try {
  history.replaceState({ view: 'today', root: true }, '');
  history.pushState({ view: 'today', trap: true }, '');
 } catch(e){}
+
+
+/* Daily Notification Reminders (Morning & Night) */
+const REMINDERS_KEY = 'morrowReminderSettings';
+
+function getReminderSettings(){
+ const fallback = {
+  enabled: true,
+  morningEnabled: true,
+  morningTime: '08:30',
+  nightEnabled: true,
+  nightTime: '21:30',
+  lastMorningDate: null,
+  lastNightDate: null
+ };
+ try {
+  const raw = localStorage.getItem(REMINDERS_KEY);
+  if(!raw) return fallback;
+  return { ...fallback, ...JSON.parse(raw) };
+ } catch(e){
+  return fallback;
+ }
+}
+
+function saveReminderSettings(settings){
+ try {
+  localStorage.setItem(REMINDERS_KEY, JSON.stringify(settings));
+ } catch(e){}
+}
+
+function updateReminderInputsState(){
+ const mCheck = document.getElementById('reminderMorningCheck');
+ const mTime = document.getElementById('reminderMorningTime');
+ if(mCheck && mTime) mTime.disabled = !mCheck.checked;
+ 
+ const nCheck = document.getElementById('reminderNightCheck');
+ const nTime = document.getElementById('reminderNightTime');
+ if(nCheck && nTime) nTime.disabled = !nCheck.checked;
+
+ const masterBtn = document.getElementById('reminderMasterToggleBtn');
+ if(masterBtn){
+  const anyOn = (mCheck?.checked || nCheck?.checked);
+  masterBtn.textContent = anyOn ? 'Turn off all' : 'Turn on both';
+ }
+}
+
+function toggleAllReminders(){
+ const mCheck = document.getElementById('reminderMorningCheck');
+ const nCheck = document.getElementById('reminderNightCheck');
+ const anyOn = (mCheck?.checked || nCheck?.checked);
+ if(mCheck) mCheck.checked = !anyOn;
+ if(nCheck) nCheck.checked = !anyOn;
+ updateReminderInputsState();
+}
+
+function updateReminderPermBox(){
+ const alertBox = document.getElementById('reminderPermAlert');
+ const alertText = document.getElementById('reminderPermText');
+ if(!alertBox) return;
+
+ if(!('Notification' in window)){
+  alertBox.style.display = 'block';
+  if(alertText) alertText.textContent = 'Notifications are not supported on this browser';
+  alertBox.querySelector('.reminder-perm-btn').style.display = 'none';
+  return;
+ }
+
+ if(Notification.permission === 'granted'){
+  alertBox.style.display = 'none';
+ } else if(Notification.permission === 'denied'){
+  alertBox.style.display = 'block';
+  if(alertText) alertText.textContent = 'Notifications blocked in browser · Allow in site settings';
+  alertBox.querySelector('.reminder-perm-btn').style.display = 'none';
+ } else {
+  alertBox.style.display = 'flex';
+  if(alertText) alertText.textContent = 'Allow browser notifications for daily reminders';
+  alertBox.querySelector('.reminder-perm-btn').style.display = 'inline-block';
+ }
+}
+
+function updateReminderUI(){
+ const s = getReminderSettings();
+ const dot = document.getElementById('reminderStatusDot');
+ const isAnyActive = s.enabled && (s.morningEnabled || s.nightEnabled);
+ if(dot){
+  if(isAnyActive && ('Notification' in window && Notification.permission === 'granted')){
+   dot.classList.add('active');
+  } else {
+   dot.classList.remove('active');
+  }
+ }
+ const summaryEl = document.getElementById('progressReminderSummary');
+ if(summaryEl){
+  if(!isAnyActive){
+   summaryEl.textContent = 'Reminders are paused';
+  } else {
+   const parts = [];
+   if(s.morningEnabled) parts.push(`Morning ${s.morningTime}`);
+   if(s.nightEnabled) parts.push(`Night ${s.nightTime}`);
+   summaryEl.textContent = parts.join(' · ');
+  }
+ }
+}
+
+function openRemindersModal(){
+ const s = getReminderSettings();
+ const mCheck = document.getElementById('reminderMorningCheck');
+ const mTime = document.getElementById('reminderMorningTime');
+ const nCheck = document.getElementById('reminderNightCheck');
+ const nTime = document.getElementById('reminderNightTime');
+ 
+ if(mCheck) mCheck.checked = !!s.morningEnabled;
+ if(mTime) mTime.value = s.morningTime || '08:30';
+ if(nCheck) nCheck.checked = !!s.nightEnabled;
+ if(nTime) nTime.value = s.nightTime || '21:30';
+
+ updateReminderInputsState();
+ updateReminderPermBox();
+
+ const modal = document.getElementById('remindersModal');
+ const backdrop = document.getElementById('remindersModalBackdrop');
+ if(modal) modal.classList.add('open');
+ if(backdrop) backdrop.classList.add('open');
+ pushModalHistory('modal');
+}
+
+function closeRemindersModal(){
+ document.getElementById('remindersModal')?.classList.remove('open');
+ document.getElementById('remindersModalBackdrop')?.classList.remove('open');
+}
+
+async function requestReminderPermission(){
+ if(!('Notification' in window)){
+  toast('Notifications not supported in this browser');
+  return false;
+ }
+ try {
+  const perm = await Notification.requestPermission();
+  updateReminderPermBox();
+  updateReminderUI();
+  if(perm === 'granted'){
+   toast('Notification permission enabled ✿');
+   return true;
+  } else {
+   toast('Notification permission not granted');
+   return false;
+  }
+ } catch(e){
+  return false;
+ }
+}
+
+async function sendSystemNotification(title, body, tag){
+ if(!('Notification' in window)) return false;
+ if(Notification.permission !== 'granted') return false;
+ 
+ try {
+  if('serviceWorker' in navigator){
+   const reg = await navigator.serviceWorker.ready;
+   if(reg && reg.showNotification){
+    await reg.showNotification(title, {
+     body,
+     tag: tag || 'morrow-notification',
+     icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🌱</text></svg>',
+     badge: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🌱</text></svg>'
+    });
+    return true;
+   }
+  }
+ } catch(e){}
+
+ try {
+  new Notification(title, {
+   body,
+   tag: tag || 'morrow-notification',
+   icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🌱</text></svg>'
+  });
+  return true;
+ } catch(e){
+  return false;
+ }
+}
+
+async function sendTestNotification(){
+ if(!('Notification' in window)){
+  toast('Notifications not supported in this browser');
+  return;
+ }
+ if(Notification.permission !== 'granted'){
+  const ok = await requestReminderPermission();
+  if(!ok) return;
+ }
+ const dueCount = topics.filter(t => !t.done && !t.graduated && !t.paused && t.dueAt <= Date.now()).length;
+ const sent = await sendSystemNotification(
+  'Morrow · Test Reminder ☀️',
+  `This is how your daily reminders will look! (${dueCount} topic${dueCount === 1 ? '' : 's'} waiting today)`,
+  'test-reminder'
+ );
+ if(sent){
+  toast('Test notification sent ✿');
+ } else {
+  toast('Could not send notification · check site settings');
+ }
+}
+
+async function saveRemindersSettingsFromModal(){
+ const mCheck = document.getElementById('reminderMorningCheck')?.checked;
+ const mTime = document.getElementById('reminderMorningTime')?.value || '08:30';
+ const nCheck = document.getElementById('reminderNightCheck')?.checked;
+ const nTime = document.getElementById('reminderNightTime')?.value || '21:30';
+ const enabled = !!(mCheck || nCheck);
+
+ const s = getReminderSettings();
+ s.enabled = enabled;
+ s.morningEnabled = !!mCheck;
+ s.morningTime = mTime;
+ s.nightEnabled = !!nCheck;
+ s.nightTime = nTime;
+ saveReminderSettings(s);
+ updateReminderUI();
+ closeRemindersModal();
+
+ if(enabled && ('Notification' in window) && Notification.permission !== 'granted'){
+  requestReminderPermission();
+ } else if(enabled){
+  toast('Daily reminders saved ✿');
+ } else {
+  toast('Reminders paused ✿');
+ }
+}
+
+function checkScheduledReminders(){
+ const s = getReminderSettings();
+ if(!s.enabled) return;
+ if(!('Notification' in window) || Notification.permission !== 'granted') return;
+
+ const now = new Date();
+ const todayKey = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}`;
+ const currentHM = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+ // Morning check: between morningTime and 13:00
+ if(s.morningEnabled && s.lastMorningDate !== todayKey && currentHM >= s.morningTime && currentHM < '13:00'){
+  const dueCount = topics.filter(t => !t.done && !t.graduated && !t.paused && t.dueAt <= Date.now()).length;
+  const body = dueCount > 0
+   ? `Good morning ✿ You have ${dueCount} topic${dueCount === 1 ? '' : 's'} waiting for revision today.`
+   : `Good morning ✿ Your garden is all caught up and resting peacefully.`;
+  sendSystemNotification('Morrow · Morning Garden ☀️', body, 'morning-reminder');
+  s.lastMorningDate = todayKey;
+  saveReminderSettings(s);
+ }
+
+ // Night check: from nightTime onwards
+ if(s.nightEnabled && s.lastNightDate !== todayKey && currentHM >= s.nightTime){
+  const dueCount = topics.filter(t => !t.done && !t.graduated && !t.paused && t.dueAt <= Date.now()).length;
+  const body = dueCount > 0
+   ? `Good evening ✿ Don't forget to mark your ${dueCount} topic${dueCount === 1 ? '' : 's'} done for today.`
+   : `Good evening ✿ All topics revised for today! Rest well and enjoy the quiet.`;
+  sendSystemNotification('Morrow · Evening Check-in 🌙', body, 'night-reminder');
+  s.lastNightDate = todayKey;
+  saveReminderSettings(s);
+ }
+}
+
+// Register service worker if available
+if('serviceWorker' in navigator){
+ navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+
+// Background reminder timer & visibility hook
+setInterval(checkScheduledReminders, 30000);
+document.addEventListener('visibilitychange', () => {
+ if(!document.hidden) checkScheduledReminders();
+});
+setTimeout(checkScheduledReminders, 2500);

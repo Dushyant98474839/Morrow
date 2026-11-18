@@ -1059,7 +1059,8 @@ input:focus,select:focus{border-color:var(--sage)}
 
 /* Topic Delete Confirmation Modal */
 .topic-delete-backdrop,
-.subject-delete-backdrop{
+.subject-delete-backdrop,
+.reminders-modal-backdrop{
   position:fixed;
   inset:0;
   z-index:52;
@@ -1071,12 +1072,14 @@ input:focus,select:focus{border-color:var(--sage)}
   transition:opacity .22s ease;
 }
 .topic-delete-backdrop.open,
-.subject-delete-backdrop.open{
+.subject-delete-backdrop.open,
+.reminders-modal-backdrop.open{
   opacity:1;
   pointer-events:auto;
 }
 .topic-delete-modal,
-.subject-delete-modal{
+.subject-delete-modal,
+.reminders-modal{
   position:fixed;
   left:50%;
   top:50%;
@@ -1093,7 +1096,8 @@ input:focus,select:focus{border-color:var(--sage)}
   transition:opacity .22s ease,transform .22s ease;
 }
 .topic-delete-modal.open,
-.subject-delete-modal.open{
+.subject-delete-modal.open,
+.reminders-modal.open{
   opacity:1;
   pointer-events:auto;
   transform:translate(-50%,-50%) scale(1);
@@ -1210,4 +1214,121 @@ input:focus,select:focus{border-color:var(--sage)}
   justify-content:flex-end;
   margin-top:9px;
   padding:2px 2px;
+}
+
+
+/* Daily Reminders Styling */
+.reminder-bell-btn{
+  position:relative;
+  font-size:15px;
+}
+.reminder-dot{
+  position:absolute;
+  top:5px;
+  right:5px;
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:var(--sage-dark);
+  border:1.5px solid #fff;
+  display:none;
+}
+.reminder-dot.active{
+  display:block;
+}
+.reminder-perm-box{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:9px 12px;
+  border-radius:13px;
+  background:rgba(212,161,135,.15);
+  border:1px solid rgba(212,161,135,.32);
+  font:500 12px 'DM Sans',sans-serif;
+  color:#8a4d33;
+}
+.reminder-perm-btn{
+  padding:5px 11px;
+  border-radius:9px;
+  border:none;
+  background:#8a4d33;
+  color:#fff;
+  font:600 11.5px 'DM Sans',sans-serif;
+  cursor:pointer;
+}
+.reminder-time-block{
+  background:rgba(255,252,245,.82);
+  border:1px solid rgba(133,145,112,.18);
+  border-radius:15px;
+  padding:11px 13px;
+}
+.reminder-label-wrap{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:7px;
+}
+.reminder-label-wrap label{
+  font:600 13px 'DM Sans',sans-serif;
+  color:var(--ink);
+  cursor:pointer;
+}
+.reminder-label-wrap input[type="checkbox"]{
+  width:16px;
+  height:16px;
+  accent-color:var(--sage-dark);
+  cursor:pointer;
+}
+.reminder-time-input-wrap{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.reminder-time-input-wrap input[type="time"]{
+  padding:6px 9px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:#fff;
+  font:600 12.5px 'DM Sans',sans-serif;
+  color:var(--ink);
+  outline:none;
+}
+.reminder-sub{
+  font-size:11px;
+  color:var(--muted);
+  line-height:1.3;
+}
+.reminder-test-btn{
+  background:transparent;
+  border:none;
+  color:var(--sage-dark);
+  font:500 12px 'DM Sans',sans-serif;
+  text-decoration:underline;
+  cursor:pointer;
+  padding:0;
+}
+.reminder-toggle-all-btn{
+  background:transparent;
+  border:none;
+  color:var(--muted);
+  font:500 11.5px 'DM Sans',sans-serif;
+  cursor:pointer;
+  padding:0;
+}
+.progress-reminder-card{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-top:16px;
+  padding:13px 15px;
+  border-radius:16px;
+  background:rgba(255,252,245,.85);
+  border:1px solid rgba(133,145,112,.2);
+  cursor:pointer;
+  transition:all .18s ease;
+}
+.progress-reminder-card:hover{
+  background:rgba(255,254,249,.96);
+  border-color:rgba(133,145,112,.35);
 }
