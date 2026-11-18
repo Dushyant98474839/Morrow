@@ -24,6 +24,9 @@
  let petals = [];
  let butterflies = [];
  let birds = [];
+ let rabbits = [];
+ let deer = [];
+ let perchBirds = [];
  let seedPuffs = [];
  let lastTs = 0;
 
@@ -597,29 +600,109 @@
   // Sync Butterflies & Birds
   const desiredButterflies = completed >= 1 ? Math.min(6, 1 + Math.floor(completed / 3)) : 1;
   while(butterflies.length < desiredButterflies){
+   const tints = ['#e8b698', '#dfc994', '#c8d8a0', '#b8c8e8', '#e8c8d8'];
    butterflies.push({
     x: W * (0.2 + Math.random() * 0.6),
     y: H * (0.44 + Math.random() * 0.34),
     vx: (Math.random() - 0.5) * 32,
     vy: (Math.random() - 0.5) * 20,
     phase: Math.random() * Math.PI * 2,
-    tint: butterflies.length % 2 === 0 ? '#e8b698' : '#dfc994',
+    tint: tints[butterflies.length % tints.length],
+    size: 0.8 + Math.random() * 0.5,
     targetId: null,
     restTimer: 0
    });
   }
   while(butterflies.length > desiredButterflies) butterflies.pop();
 
-  const desiredBirds = completed >= 4 ? Math.min(3, Math.floor(completed / 4)) : 1;
+  // Sky birds — scaled by total blooms across all hills
+  const totalBlooms = hillCards.reduce((s, h) => s + h.bloomCount, 0);
+  const desiredBirds = totalBlooms >= 2 ? Math.min(7, 1 + Math.floor(totalBlooms / 2)) : (completed >= 1 ? 1 : 0);
+  const birdSpecies = ['sparrow', 'swallow', 'finch', 'crow', 'starling', 'swallow'];
   while(birds.length < desiredBirds){
+   const sp = birdSpecies[birds.length % birdSpecies.length];
    birds.push({
-    x: 0.15 + Math.random() * 0.7,
-    y: 0.13 + Math.random() * 0.12,
-    speed: 0.022 + Math.random() * 0.018,
-    phase: Math.random() * Math.PI * 2
+    x: 0.05 + Math.random() * 0.9,
+    y: 0.07 + Math.random() * 0.14,
+    speed: sp === 'swallow' ? 0.038 + Math.random() * 0.022 : sp === 'crow' ? 0.013 + Math.random() * 0.009 : 0.019 + Math.random() * 0.016,
+    phase: Math.random() * Math.PI * 2,
+    species: sp,
+    wingbeat: sp === 'swallow' ? 11 : sp === 'crow' ? 4.2 : 7.5,
+    size: sp === 'crow' ? 1.65 : sp === 'swallow' ? 0.88 : 1.0,
+    color: sp === 'crow' ? 'rgba(42,52,46,0.62)' : sp === 'starling' ? 'rgba(55,68,80,0.52)' : 'rgba(72,92,74,0.48)',
+    flockLeader: birds.length > 0 && Math.random() < 0.42 ? birds.length - 1 : -1
    });
   }
   while(birds.length > desiredBirds) birds.pop();
+
+  // Rabbits — per-hill, based on health ratio
+  while(rabbits.length < hillCards.length) rabbits.push([]);
+  rabbits.length = hillCards.length;
+  hillCards.forEach((hill, hi) => {
+   const healthRatio = hill.totalCount > 0 ? hill.bloomCount / hill.totalCount : 0;
+   const desiredR = healthRatio >= 0.6 ? 2 : healthRatio >= 0.25 ? 1 : 0;
+   if(!Array.isArray(rabbits[hi])) rabbits[hi] = [];
+   const rab = rabbits[hi];
+   const hSeed = hill.crestSeed;
+   const rabColors = ['#c8b89a', '#b0a080', '#d8cbb0', '#a89070'];
+   while(rab.length < desiredR){
+    const side = rab.length % 2 === 0 ? -1 : 1;
+    const startLy = 55 + hash(hSeed + rab.length * 71) * 110;
+    const startLx = hillPathLocalX(hill, startLy) + side * (38 + hash(hSeed + rab.length * 53) * 52);
+    rab.push({
+     lx: Math.max(24, Math.min(W - 24, startLx)),
+     ly: startLy,
+     vx: 0,
+     phase: hash(hSeed + rab.length * 61) * Math.PI * 2,
+     hopTimer: hash(hSeed + rab.length * 43) * 3,
+     hopPhase: 0,
+     hopAmp: 0,
+     dir: side,
+     sitting: true,
+     earPerk: 0,
+     color: rabColors[hi % rabColors.length],
+     hillIndex: hi
+    });
+   }
+   while(rab.length > desiredR) rab.pop();
+  });
+
+  // Deer — rare, appears when garden is very flourishing (8+ healthy blooms)
+  const totalHealthy = hillCards.reduce((s, h) => s + h.bloomCount, 0);
+  const desiredDeer = totalHealthy >= 8 ? 1 : 0;
+  while(deer.length < desiredDeer){
+   const hi = Math.max(0, Math.min(hillCards.length - 1, Math.round(activeHillPos)));
+   const hill = hillCards[hi] || hillCards[0];
+   const startLy = hill ? 55 + Math.random() * 90 : 80;
+   const startLx = hill ? hillPathLocalX(hill, startLy) + (Math.random() - 0.5) * 70 : W * 0.5;
+   deer.push({
+    lx: Math.max(32, Math.min(W - 32, startLx)),
+    ly: startLy,
+    vx: (Math.random() - 0.5) * 8,
+    phase: Math.random() * Math.PI * 2,
+    graze: 0,
+    gazeTimer: 2 + Math.random() * 4,
+    fleeing: false,
+    hillIndex: hi
+   });
+  }
+  while(deer.length > desiredDeer) deer.pop();
+
+  // Perched birds — sit on lanterns/trees when garden has blooms
+  const desiredPerch = Math.min(4, Math.floor(totalBlooms / 3));
+  while(perchBirds.length < desiredPerch){
+   perchBirds.push({
+    hillIndex: perchBirds.length % Math.max(1, hillCards.length),
+    onLantern: perchBirds.length % 2 === 0,
+    treeIdx: perchBirds.length % 3,
+    phase: Math.random() * Math.PI * 2,
+    color: perchBirds.length % 4 === 0 ? '#d4903a' : perchBirds.length % 4 === 1 ? '#7a9476' : perchBirds.length % 4 === 2 ? '#b08090' : '#6a8098',
+    chirpTimer: Math.random() * 5,
+    singing: false,
+    wingFlap: 0
+   });
+  }
+  while(perchBirds.length > desiredPerch) perchBirds.pop();
 
   if(!seedPuffs.length){
    seedPuffs = Array.from({ length: 14 }, (_, k) => ({
@@ -1312,6 +1395,27 @@
 
   if(hill.dragonfly && hill.pond && !isBackgroundPeek){
    drawDragonfly(hill.dragonfly, hill.pond, t);
+  }
+
+  // Rabbits on this hill (only on front card, not peek)
+  if(!isBackgroundPeek && Array.isArray(rabbits[hill.index])){
+   for(const rb of rabbits[hill.index]){
+    drawRabbit(rb, t, dt, pal);
+   }
+  }
+
+  // Deer on this hill (front card only)
+  if(!isBackgroundPeek){
+   for(const d of deer){
+    if(d.hillIndex === hill.index) drawDeer(d, t, dt, pal);
+   }
+  }
+
+  // Perched birds on this hill (front card only)
+  if(!isBackgroundPeek){
+   for(const pb of perchBirds){
+    if(pb.hillIndex === hill.index) drawPerchedBird(pb, hill, t, dt, pal);
+   }
   }
 
   // Atmospheric aerial-perspective veil on hills further back in the stack
@@ -2113,6 +2217,254 @@
   ctx.restore();
  }
 
+
+ // ── Rabbit ───────────────────────────────────────────────────────────────
+ function drawRabbit(rb, t, dt, pal){
+  rb.hopTimer -= dt;
+  if(rb.hopTimer <= 0){
+   rb.sitting = !rb.sitting;
+   if(!rb.sitting){
+    rb.hopPhase = 0;
+    rb.hopAmp = 1;
+    rb.vx = rb.dir * (14 + Math.random() * 18);
+    rb.hopTimer = 0.38 + Math.random() * 0.3;
+   }else{
+    rb.vx = 0;
+    rb.hopTimer = 1.2 + Math.random() * 2.5;
+    if(Math.random() < 0.4) rb.dir *= -1;
+   }
+  }
+  if(!rb.sitting){
+   rb.hopPhase = Math.min(1, rb.hopPhase + dt / 0.38);
+   rb.hopAmp = Math.sin(rb.hopPhase * Math.PI);
+   rb.lx += rb.vx * dt;
+   if(rb.lx < 22){ rb.lx = 22; rb.dir = 1; }
+   if(rb.lx > W - 22){ rb.lx = W - 22; rb.dir = -1; }
+  }
+  const bodyY = -rb.hopAmp * 7;
+  const earPerk = rb.sitting ? 1 : rb.hopAmp;
+  const col = rb.color;
+  const belly = pal.isNight ? '#7a6e62' : '#e8dcc8';
+  const shadow = pal.isNight ? 'rgba(16,28,22,0.28)' : 'rgba(28,46,28,0.18)';
+  ctx.save();
+  ctx.translate(rb.lx, rb.ly + bodyY);
+  ctx.fillStyle = shadow;
+  ctx.beginPath();
+  ctx.ellipse(0, 2, 10, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 7, 5.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.ellipse(1.5, 0.5, 4, 3.2, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.arc(-7.5, 0.5, 3.0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.ellipse(rb.dir * 6, -4, 4.4, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = pal.isNight ? '#c08080' : '#3c2820';
+  ctx.beginPath();
+  ctx.arc(rb.dir * 7.5, -5, 1.1, 0, Math.PI * 2);
+  ctx.fill();
+  const earLean = rb.sitting ? 0 : rb.dir * 0.3;
+  ctx.fillStyle = col;
+  ctx.save();
+  ctx.translate(rb.dir * 5, -8);
+  ctx.rotate(earLean - rb.dir * 0.1);
+  ctx.beginPath();
+  ctx.ellipse(0, -4 * earPerk, 1.6, 4.5 * earPerk, earLean, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = pal.isNight ? '#7a5a60' : '#e8aab0';
+  ctx.beginPath();
+  ctx.ellipse(0, -3.5 * earPerk, 0.7, 3.2 * earPerk, earLean, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = col;
+  ctx.save();
+  ctx.translate(rb.dir * 6.5, -8);
+  ctx.rotate(earLean + rb.dir * 0.18);
+  ctx.beginPath();
+  ctx.ellipse(0, -3.5 * earPerk, 1.4, 3.8 * earPerk, earLean + 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.ellipse(rb.dir * 3.5, 4.5, 2.4, 1.4, 0, 0, Math.PI * 2);
+  ctx.ellipse(rb.dir * 6.5, 4.5, 2.4, 1.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+ }
+
+ // ── Deer ─────────────────────────────────────────────────────────────────
+ function drawDeer(d, t, dt, pal){
+  d.gazeTimer -= dt;
+  if(d.gazeTimer <= 0){
+   d.graze = d.graze === 0 ? 1 : 0;
+   d.gazeTimer = d.graze ? 1.5 + Math.random() * 2 : 2.5 + Math.random() * 3;
+   if(!d.graze && Math.random() < 0.3) d.vx = (Math.random() - 0.5) * 20;
+  }
+  if(!d.graze){
+   d.lx += d.vx * dt;
+   d.vx *= Math.pow(0.85, dt * 60);
+   if(d.lx < 36){ d.lx = 36; d.vx = Math.abs(d.vx); }
+   if(d.lx > W - 36){ d.lx = W - 36; d.vx = -Math.abs(d.vx); }
+  }
+  const dir = d.vx >= 0 ? 1 : -1;
+  const bodyBob = Math.sin(t * 3.5 + d.phase) * (d.graze ? 0 : 1.2);
+  const legSwing = d.graze ? 0 : Math.sin(t * 6 + d.phase) * 0.3;
+  const neckTilt = d.graze ? 0.65 : -0.1;
+  const col = pal.isNight ? '#7a6248' : '#c8945a';
+  const belly = pal.isNight ? '#5e4c3c' : '#e0b888';
+  const shadow = pal.isNight ? 'rgba(14,24,20,0.28)' : 'rgba(28,48,28,0.16)';
+  ctx.save();
+  ctx.translate(d.lx, d.ly + bodyBob);
+  ctx.fillStyle = shadow;
+  ctx.beginPath();
+  ctx.ellipse(0, 10, 18, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const legCol = pal.isNight ? '#5a4838' : '#a07248';
+  ctx.strokeStyle = legCol;
+  ctx.lineWidth = 2.4;
+  ctx.lineCap = 'round';
+  [[- 8, 0.3],[8, -0.3]].forEach(([ox, phase]) => {
+   const swing = legSwing + phase;
+   ctx.beginPath(); ctx.moveTo(dir*(6+ox*0.1),4); ctx.lineTo(dir*(6+ox*0.1)+Math.sin(swing)*7,16); ctx.stroke();
+   ctx.beginPath(); ctx.moveTo(dir*(-4+ox*0.1),4); ctx.lineTo(dir*(-4+ox*0.1)+Math.sin(-swing)*7,16); ctx.stroke();
+  });
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 14, 7.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.ellipse(0, 2, 10, 4.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = pal.isNight ? '#c8c0b0' : '#f8f4e8';
+  ctx.beginPath();
+  ctx.arc(-dir * 13, -1, 3.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.save();
+  ctx.translate(dir * 10, -4);
+  ctx.rotate(neckTilt * dir);
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 3.5, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.translate(0, -7);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 4.5, 3.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(dir*3, 1, 2.8, 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = pal.isNight ? '#c0a888' : '#2c1e14';
+  ctx.beginPath();
+  ctx.arc(dir*2, -1, 1.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = pal.isNight ? '#5a4830' : '#8c6038';
+  ctx.lineWidth = 1.4; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(0,-3); ctx.lineTo(dir*1,-11);
+  ctx.moveTo(dir*1,-8); ctx.lineTo(dir*4,-12);
+  ctx.moveTo(dir*1,-11); ctx.lineTo(-dir*1,-14);
+  ctx.stroke();
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.ellipse(-dir*2.5,-1,1.6,3.5,dir*0.4,0,Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = pal.isNight ? '#8a5058' : '#f0b8b0';
+  ctx.beginPath();
+  ctx.ellipse(-dir*2.5,-1,0.8,2.4,dir*0.4,0,Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+  ctx.restore();
+ }
+
+ // ── Perched Bird ─────────────────────────────────────────────────────────
+ function drawPerchedBird(pb, hill, t, dt, pal){
+  if(!hill) return;
+  let px, py;
+  if(pb.onLantern && hill.lantern){
+   px = hill.lantern.lx; py = hill.lantern.ly - 30;
+  }else if(hill.trees.length > 0){
+   const tr = hill.trees[pb.treeIdx % hill.trees.length];
+   px = tr.lx + (pb.treeIdx % 2 === 0 ? -10 : 10) * tr.scale;
+   py = tr.ly - 44 * tr.scale;
+  }else{ return; }
+  pb.chirpTimer -= dt;
+  if(pb.chirpTimer <= 0){
+   pb.singing = !pb.singing;
+   pb.chirpTimer = pb.singing ? 0.6 + Math.random() * 0.8 : 2 + Math.random() * 4;
+   if(pb.singing && Math.random() < 0.3) pb.wingFlap = 0.6;
+  }
+  if(pb.wingFlap > 0) pb.wingFlap = Math.max(0, pb.wingFlap - dt * 1.8);
+  const col = pb.color;
+  const belly = pal.isNight ? '#686460' : '#f0ead8';
+  const wingOpen = 0.3 + pb.wingFlap * 0.7;
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.fillStyle = pal.isNight ? 'rgba(14,24,22,0.22)' : 'rgba(28,46,30,0.14)';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 7, 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(0,2); ctx.lineTo(-5,8); ctx.lineTo(-2,8); ctx.lineTo(0,4); ctx.lineTo(2,8); ctx.lineTo(5,8);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 4.5, 3.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.ellipse(0.5, 0.5, 2.8, 2.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const wingY = -wingOpen * 3;
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.ellipse(-4*wingOpen, wingY, 4*wingOpen, 2.2, -0.3, 0, Math.PI*2);
+  ctx.ellipse(4*wingOpen, wingY, 4*wingOpen, 2.2, 0.3, 0, Math.PI*2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(0, -4, 3.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = pal.isNight ? '#c0a880' : '#1c1410';
+  ctx.beginPath();
+  ctx.arc(1.4,-4.5,0.9,0,Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.beginPath();
+  ctx.arc(1.7,-4.8,0.3,0,Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = pal.isNight ? '#a09060' : '#d0a848';
+  ctx.beginPath();
+  ctx.moveTo(3.5,-4.2); ctx.lineTo(6.5,-3.6); ctx.lineTo(3.5,-3.4);
+  ctx.closePath(); ctx.fill();
+  if(pb.singing){
+   const noteX = 7 + Math.sin(t*8+pb.phase)*2;
+   const noteY = -6 + Math.cos(t*6+pb.phase)*2;
+   ctx.fillStyle = pal.isNight ? 'rgba(255,236,160,0.7)' : 'rgba(80,100,70,0.6)';
+   ctx.font = '7px sans-serif';
+   ctx.textBaseline = 'middle';
+   ctx.fillText('\u266a', noteX, noteY);
+  }
+  ctx.strokeStyle = pal.isNight ? '#7a6240' : '#b08040';
+  ctx.lineWidth = 1.1; ctx.lineCap = 'round';
+  [-2,2].forEach(ox => {
+   ctx.beginPath();
+   ctx.moveTo(ox,3); ctx.lineTo(ox-2,7);
+   ctx.moveTo(ox,3); ctx.lineTo(ox+2,7);
+   ctx.moveTo(ox,3); ctx.lineTo(ox,7);
+   ctx.stroke();
+  });
+  ctx.restore();
+ }
+
  function renderFrame(ts){
   if(!lastTs) lastTs = ts;
   const dt = Math.min(0.05, (ts - lastTs) / 1000);
@@ -2235,19 +2587,38 @@
   }
 
   if(!pal.isNight && !pal.isRain){
-   ctx.strokeStyle = 'rgba(72, 92, 74, 0.48)';
-   ctx.lineWidth = 1.3;
    for(const b of birds){
+    // flock loosely — slight pull towards leader
+    if(b.flockLeader >= 0 && b.flockLeader < birds.length){
+     const leader = birds[b.flockLeader];
+     b.x += (leader.x - b.x) * dt * 0.08;
+     b.y += (leader.y - b.y) * dt * 0.06;
+    }
     b.x += b.speed * dt;
-    if(b.x > 1.12) b.x = -0.12;
+    if(b.x > 1.14) b.x = -0.14;
     const bx = b.x * W + idlePanX * 0.35;
     const by = b.y * H + Math.sin(t * 2.2 + b.phase) * 4;
-    const wing = Math.sin(t * 7.5 + b.phase) * 3.5;
+    const sz = (b.size || 1.0);
+    const wb = b.wingbeat || 7.5;
+    const wing = Math.sin(t * wb + b.phase) * 3.5 * sz;
+    const spread = 6 * sz;
+    ctx.strokeStyle = b.color || 'rgba(72,92,74,0.48)';
+    ctx.lineWidth = sz > 1.3 ? 1.9 : 1.2;
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(bx - 6, by - wing);
-    ctx.quadraticCurveTo(bx - 3, by - 3, bx, by);
-    ctx.quadraticCurveTo(bx + 3, by - 3, bx + 6, by - wing);
+    ctx.moveTo(bx - spread, by - wing);
+    ctx.quadraticCurveTo(bx - spread * 0.5, by - 3 * sz, bx, by);
+    ctx.quadraticCurveTo(bx + spread * 0.5, by - 3 * sz, bx + spread, by - wing);
     ctx.stroke();
+    // swallows get a small forked tail
+    if(b.species === 'swallow'){
+     ctx.beginPath();
+     ctx.moveTo(bx, by + 1);
+     ctx.lineTo(bx - 3, by + 5);
+     ctx.moveTo(bx, by + 1);
+     ctx.lineTo(bx + 3, by + 5);
+     ctx.stroke();
+    }
    }
   }
 
@@ -2316,12 +2687,26 @@
 
     const flapSpeed = bf.restTimer > 0 ? 4 : 15;
     const flap = 0.25 + 0.75 * Math.abs(Math.sin(t * flapSpeed + bf.phase));
+    const bfSz = bf.size || 1.0;
     ctx.save();
     ctx.translate(bf.x, bf.y);
+    // upper wings
     ctx.fillStyle = bf.tint;
     ctx.beginPath();
-    ctx.ellipse(-3.5 * flap, -1, 4.4 * flap, 3.1, -0.35, 0, Math.PI * 2);
-    ctx.ellipse(3.5 * flap, -1, 4.4 * flap, 3.1, 0.35, 0, Math.PI * 2);
+    ctx.ellipse(-3.5 * flap * bfSz, -1, 4.4 * flap * bfSz, 3.1 * bfSz, -0.35, 0, Math.PI * 2);
+    ctx.ellipse(3.5 * flap * bfSz, -1, 4.4 * flap * bfSz, 3.1 * bfSz, 0.35, 0, Math.PI * 2);
+    ctx.fill();
+    // lower hindwings (slightly smaller, different shade)
+    ctx.globalAlpha = 0.72;
+    ctx.beginPath();
+    ctx.ellipse(-2.8 * flap * bfSz, 1.8, 3.2 * flap * bfSz, 2.0 * bfSz, -0.5, 0, Math.PI * 2);
+    ctx.ellipse(2.8 * flap * bfSz, 1.8, 3.2 * flap * bfSz, 2.0 * bfSz, 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // body
+    ctx.fillStyle = 'rgba(60,46,36,0.75)';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 0.9 * bfSz, 3.4 * bfSz, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
    }
