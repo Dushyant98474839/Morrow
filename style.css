@@ -1052,10 +1052,7 @@ input:focus,select:focus{border-color:var(--sage)}
 .library-topic-actions .lib-del-icon-btn{
   margin-left:auto;
 }
-.lib-del-subject-btn{
-  margin-left:6px;
-  margin-right:2px;
-}
+
 
 /* Topic Delete Confirmation Modal */
 .topic-delete-backdrop,
@@ -1343,21 +1340,34 @@ input:focus,select:focus{border-color:var(--sage)}
 
 
 /* Subject & Topic Edit Button Styling */
-.lib-edit-subject-icon-btn{
+.library-subject-title-actions{
+  display:inline-flex;
+  align-items:center;
+  gap:2px;
+  margin-left:auto;
+  margin-right:2px;
+  vertical-align:middle;
+}
+.lib-edit-subject-icon-btn,
+.lib-del-subject-btn{
   display:inline-flex;
   align-items:center;
   justify-content:center;
   width:26px;
   height:26px;
-  border-radius:8px;
-  color:#7e8275;
-  background:transparent;
+  padding:0;
+  margin:0;
+  border-radius:7px;
   border:none;
+  background:transparent;
   cursor:pointer;
+  box-sizing:border-box;
+  flex:none;
+}
+.lib-edit-subject-icon-btn{
+  color:#7e8275;
   opacity:.8;
   transition:all .15s ease;
-  margin-left:6px;
-  margin-right:2px;
 }
 .lib-edit-subject-icon-btn:hover{
   opacity:1;
@@ -1365,32 +1375,57 @@ input:focus,select:focus{border-color:var(--sage)}
   color:#44483c;
   transform:scale(1.08);
 }
+.lib-del-subject-btn{
+  color:#b8826d;
+  opacity:.75;
+  transition:all .15s ease;
+}
+.lib-del-subject-btn:hover{
+  opacity:1;
+  background:rgba(184,130,109,.12);
+  color:#c56b52;
+  transform:scale(1.08) rotate(-4deg);
+}
 .library-topic-action-icons{
   display:inline-flex;
   align-items:center;
-  gap:4px;
+  gap:2px;
   margin-left:auto;
 }
+.library-topic-action-icons .edit-topic-icon-btn,
 .library-topic-action-icons .lib-del-icon-btn{
-  margin-left:0;
-}
-.lib-icon-action-btn.edit-topic-icon-btn{
-  width:28px;
-  height:28px;
   display:inline-flex;
   align-items:center;
   justify-content:center;
+  width:28px;
+  height:28px;
+  padding:0;
+  margin:0;
+  border-radius:8px;
   border:none;
   background:transparent;
-  color:#7e8275;
-  border-radius:8px;
   cursor:pointer;
-  opacity:.8;
+  box-sizing:border-box;
+  flex:none;
   transition:all .15s ease;
 }
-.lib-icon-action-btn.edit-topic-icon-btn:hover{
+.library-topic-action-icons .edit-topic-icon-btn{
+  color:#7e8275;
+  opacity:.8;
+}
+.library-topic-action-icons .edit-topic-icon-btn:hover{
   opacity:1;
   background:rgba(126,130,117,.15);
   color:#44483c;
   transform:scale(1.08);
+}
+.library-topic-action-icons .lib-del-icon-btn{
+  color:#b8826d;
+  opacity:.75;
+}
+.library-topic-action-icons .lib-del-icon-btn:hover{
+  opacity:1;
+  background:rgba(184,130,109,.12);
+  color:#c56b52;
+  transform:scale(1.08) rotate(-4deg);
 }
