@@ -620,38 +620,50 @@
     };
    }else{
     const spanY = usableMeadowBottom - usableMeadowTop;
-    const numBeds = count <= 3 ? count : count <= 6 ? 4 : count <= 12 ? 6 : count <= 18 ? 8 : 10;
+    const goldenRatio = 0.6180339887;
 
-    subjTopics.forEach((t, i) => {
+    // 1. Organic distribution along the hillside using low-discrepancy golden ratio
+    const tentativePlants = subjTopics.map((t, i) => {
      const prev = prevPlantMap.get(t.id);
-     const bedIdx = i % numBeds;
-     const bedSubIdx = Math.floor(i / numBeds);
+     const rank = count === 1 ? 0.45 : (i + 0.35) / count;
+     const ly = usableMeadowTop + rank * spanY + (hash(hSeed + t.id * 7 + 2) - 0.5) * (count > 6 ? 14 : 8);
+     const pCenter = hillPathLocalX(hill, ly);
 
-     // Procedural cluster bed distribution across meadow depth tiers
-     const bedFrac = (bedIdx + 0.5) / numBeds;
-     const bedLy = usableMeadowTop + bedFrac * spanY + (hash(hSeed + bedIdx * 37 + 5) - 0.5) * 12;
-     const pCenter = hillPathLocalX(hill, bedLy);
-     const side = (bedIdx % 2 === 0) ? -1 : 1;
+     // Alternating banks with natural golden-ratio lateral spread
+     const side = ((i + idx + Math.floor(hash(t.id + 5) * 2)) % 2 === 0) ? -1 : 1;
      const bankSpan = side < 0 ? (pCenter - 48) : (W - pCenter - 48);
+     const lateralRatio = 0.28 + 0.60 * ((i * goldenRatio + hash(t.id + 1) * 0.35) % 1);
+     let lx = pCenter + side * Math.max(34, bankSpan * lateralRatio);
+     lx = Math.max(34, Math.min(W - 34, lx));
 
-     // Bed center on bank
-     const lateralRatio = 0.30 + 0.54 * hash(hSeed + bedIdx * 43 + 11);
-     const bedLx = pCenter + side * Math.max(34, bankSpan * lateralRatio);
+     return { t, i, prev, lx, ly };
+    });
 
-     // Tight companion clustering: blooms pack together with natural depth layering
-     let lx = bedLx;
-     let ly = bedLy;
-     if(bedSubIdx > 0){
-      const angle = (bedSubIdx * 2.3999 + hash(t.id + 7) * 0.8);
-      const radX = 14 + bedSubIdx * 5.2;
-      const radY = 9 + bedSubIdx * 3.6;
-      lx += Math.cos(angle) * radX;
-      ly += Math.sin(angle) * radY;
-     } else {
-      lx += (hash(t.id + 3) - 0.5) * 8;
-      ly += (hash(t.id + 4) - 0.5) * 6;
+    // 2. Collision relaxation pass: ensures every flower has breathing room and never awkwardly collides
+    const minDist = 32;
+    for(let iter = 0; iter < 4; iter++){
+     for(let i = 0; i < tentativePlants.length; i++){
+      for(let j = i + 1; j < tentativePlants.length; j++){
+       const pi = tentativePlants[i];
+       const pj = tentativePlants[j];
+       const dx = pj.lx - pi.lx;
+       const dy = pj.ly - pi.ly;
+       const dist = Math.hypot(dx, dy);
+       if(dist < minDist && dist > 0.001){
+        const overlap = (minDist - dist) * 0.5;
+        const nx = dx / dist;
+        const ny = dy / dist;
+        pi.lx = Math.max(34, Math.min(W - 34, pi.lx - nx * overlap));
+        pj.lx = Math.max(34, Math.min(W - 34, pj.lx + nx * overlap));
+        pi.ly = Math.max(usableMeadowTop - 8, Math.min(usableMeadowBottom + 12, pi.ly - ny * overlap));
+        pj.ly = Math.max(usableMeadowTop - 8, Math.min(usableMeadowBottom + 12, pj.ly + ny * overlap));
+       }
+      }
      }
+    }
 
+    // 3. Obstacle avoidance & final plant object generation
+    tentativePlants.forEach(({ t, i, prev, lx, ly }) => {
      if(hill.pond){
       const normDist = Math.hypot((lx - hill.pond.lx) / (hill.pond.rx + 24), (ly - hill.pond.ly) / (hill.pond.ry + 20));
       if(normDist < 1){
