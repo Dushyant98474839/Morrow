@@ -620,7 +620,6 @@
     };
    }else{
     const spanY = usableMeadowBottom - usableMeadowTop;
-    const proceduralZoom = Math.max(0.64, 0.98 - Math.max(0, count - 3) * 0.016);
     const numBeds = count <= 3 ? count : count <= 6 ? 4 : count <= 12 ? 6 : count <= 18 ? 8 : 10;
 
     subjTopics.forEach((t, i) => {
@@ -628,7 +627,7 @@
      const bedIdx = i % numBeds;
      const bedSubIdx = Math.floor(i / numBeds);
 
-     // Procedural space distribution across meadow tiers
+     // Procedural cluster bed distribution across meadow depth tiers
      const bedFrac = (bedIdx + 0.5) / numBeds;
      const bedLy = usableMeadowTop + bedFrac * spanY + (hash(hSeed + bedIdx * 37 + 5) - 0.5) * 12;
      const pCenter = hillPathLocalX(hill, bedLy);
@@ -639,18 +638,18 @@
      const lateralRatio = 0.30 + 0.54 * hash(hSeed + bedIdx * 43 + 11);
      const bedLx = pCenter + side * Math.max(34, bankSpan * lateralRatio);
 
-     // Companion clustering: shrinks stuff slightly and adds procedural spacing as count increases!
+     // Tight companion clustering: blooms pack together with natural depth layering
      let lx = bedLx;
      let ly = bedLy;
      if(bedSubIdx > 0){
       const angle = (bedSubIdx * 2.3999 + hash(t.id + 7) * 0.8);
-      const radX = (13 + bedSubIdx * 5.0) * proceduralZoom;
-      const radY = (8 + bedSubIdx * 3.4) * proceduralZoom;
+      const radX = 14 + bedSubIdx * 5.2;
+      const radY = 9 + bedSubIdx * 3.6;
       lx += Math.cos(angle) * radX;
       ly += Math.sin(angle) * radY;
      } else {
-      lx += (hash(t.id + 3) - 0.5) * 8 * proceduralZoom;
-      ly += (hash(t.id + 4) - 0.5) * 6 * proceduralZoom;
+      lx += (hash(t.id + 3) - 0.5) * 8;
+      ly += (hash(t.id + 4) - 0.5) * 6;
      }
 
      if(hill.pond){
@@ -674,8 +673,8 @@
      const level = t.level || 0;
      const species = speciesForTopic(t, i, hill);
      const fallenPetals = Array.from({ length: 4 }, (_, k) => ({
-      dx: (hash(t.id + k * 19) - 0.5) * 20 * proceduralZoom,
-      dy: (2 + hash(t.id + k * 23) * 6) * proceduralZoom,
+      dx: (hash(t.id + k * 19) - 0.5) * 22,
+      dy: 2 + hash(t.id + k * 23) * 6,
       rot: hash(t.id + k * 29) * Math.PI
      }));
 
@@ -686,7 +685,7 @@
       lx,
       ly,
       phase: hash(t.id + 7) * Math.PI * 2,
-      scale: (0.92 + hash(t.id + 13) * 0.18) * proceduralZoom,
+      scale: 0.95 + hash(t.id + 13) * 0.08, // Full prominent original size (~0.95-1.03x)
       state,
       level,
       species,
@@ -700,6 +699,7 @@
      });
     });
 
+    // Depth-sort plants so foreground flowers naturally layer and overlap over background flowers
     hill.plants.sort((a, b) => a.ly - b.ly);
    }
 
