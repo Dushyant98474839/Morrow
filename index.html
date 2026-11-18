@@ -375,6 +375,12 @@
           <span>🌱</span><span id="gardenDuePillLabel">Visit thirsty plant</span>
         </button>
 
+        <div class="garden-zoom-bar" id="gardenZoomBar" role="toolbar" aria-label="Garden zoom controls">
+          <button class="garden-zoom-btn" type="button" onclick="zoomInGarden()" title="Zoom in to inspect flowers" aria-label="Zoom in">＋</button>
+          <button class="garden-zoom-btn garden-zoom-label" id="gardenZoomLabel" type="button" onclick="resetZoomGarden()" title="Reset framing to fit screen" aria-label="Reset zoom">Fit</button>
+          <button class="garden-zoom-btn" type="button" onclick="zoomOutGarden()" title="Zoom out for panorama" aria-label="Zoom out">－</button>
+        </div>
+
 
 
         <div class="garden-specimen-card" id="gardenSpecimenCard" role="region" aria-label="Selected plant details">

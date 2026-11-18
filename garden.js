@@ -18,6 +18,12 @@
  let windGust = 0;
  let windTarget = 0;
  let pointerX = 0.5, pointerY = 0.5;
+
+ // Interactive Zoom & Pan State (Auto-fit framing with user zoom controls)
+ let gardenZoomLevel = 1.0;
+ let gardenCurrentZoom = 1.0;
+ let gardenPanX = 0, gardenPanY = 0;
+ let targetPanX = 0, targetPanY = 0;
  let ripples = [];
  let droplets = [];
  let motes = [];
@@ -130,14 +136,26 @@
  /* Compute visual card-stack transform for hill `i` given continuous `activeHillPos` */
  function getHillCardPose(hill){
   const rel = hill.index - activeHillPos;
-  const frontCrestY = H * 0.41;
+
+  // Adaptive Auto-Framing: keeps everything comfortably in frame without clipping as flowers or features expand!
+  const count = hill.totalCount || 0;
+  const countOverage = Math.max(0, count - 4);
+  const autoFitScale = Math.min(1.0, Math.max(0.78, 1.0 - countOverage * 0.011 - (H < 760 ? 0.06 : 0)));
+  const frontCrestY = (H * 0.38) - Math.min(26, countOverage * 1.4) + (1 - autoFitScale) * 16;
+
+  // User interactive zoom and pan
+  const userScale = gardenCurrentZoom;
+  const isFront = Math.abs(rel) < 0.45;
+  const effectiveUserScale = isFront ? userScale : (1 + (userScale - 1) * 0.32);
+  const effectivePanX = isFront ? gardenPanX : (gardenPanX * 0.28);
+  const effectivePanY = isFront ? gardenPanY : (gardenPanY * 0.28);
 
   if(rel >= 0){
    // Hills stacked behind the active hill, cascading upward like cards
    const compressedLift = (1 - Math.exp(-rel * 0.46)) * (H * 0.185) + Math.min(rel, 5) * 12;
-   const crestY = frontCrestY - compressedLift;
-   const scale = Math.max(0.75, 1 - rel * 0.046);
-   const shiftX = Math.sin(hill.index * 1.85) * Math.min(24, rel * 13);
+   const crestY = (frontCrestY - compressedLift) + effectivePanY;
+   const scale = Math.max(0.68, (1 - rel * 0.046) * autoFitScale * effectiveUserScale);
+   const shiftX = Math.sin(hill.index * 1.85) * Math.min(24, rel * 13) + effectivePanX;
    return {
     rel,
     crestY,
@@ -149,9 +167,9 @@
   }else{
    // Active front hill flipping downward off the stack toward the viewer
    const progress = Math.min(1.25, -rel);
-   const crestY = frontCrestY + Math.pow(progress, 1.12) * (H * 0.65);
-   const scale = 1 + progress * 0.055;
-   const shiftX = 0;
+   const crestY = (frontCrestY + Math.pow(progress, 1.12) * (H * 0.65)) + effectivePanY;
+   const scale = (1 + progress * 0.055) * autoFitScale * effectiveUserScale;
+   const shiftX = effectivePanX;
    const alpha = Math.max(0, 1 - Math.pow(progress, 1.5) * 1.15);
    return {
     rel,
@@ -339,8 +357,8 @@
   hillCards = [];
   const usedArchetypeIds = new Set();
 
-  const usableMeadowTop = 52;
-  const usableMeadowBottom = Math.max(210, H * 0.44);
+  const usableMeadowTop = 50;
+  const usableMeadowBottom = Math.max(200, Math.min(260, H * 0.38));
 
   activeSubjects.forEach((subj, idx) => {
    const subjTopics = (bySubject.get(subj) || []).slice().sort((a, b) => a.id - b.id);
@@ -605,19 +623,39 @@
      phase: hash(hSeed + 91) * Math.PI * 2
     };
    }else{
-    const densityScale = count > 8 ? 0.84 : count > 5 ? 0.91 : 0.98;
     const spanY = usableMeadowBottom - usableMeadowTop;
+    const numBeds = count <= 3 ? count : count <= 7 ? 4 : count <= 14 ? 6 : 8;
+    const densityScale = count > 16 ? 0.78 : count > 10 ? 0.84 : count > 5 ? 0.90 : 0.96;
 
     subjTopics.forEach((t, i) => {
      const prev = prevPlantMap.get(t.id);
-     const frac = count === 1 ? 0.44 : (i + 0.35) / count;
-     const ly = usableMeadowTop + frac * spanY + (hash(t.id + 2) - 0.5) * 10;
-     const pCenter = hillPathLocalX(hill, ly);
-     const side = ((i + idx + Math.floor(hash(t.id + 5) * 2)) % 2 === 0) ? -1 : 1;
-     const bankSpan = side < 0 ? (pCenter - 46) : (W - pCenter - 46);
-     const lateralRatio = 0.34 + 0.58 * ((i * 0.6180339 + hash(t.id + 1) * 0.4) % 1);
-     let lx = pCenter + side * Math.max(36, bankSpan * lateralRatio);
-     lx = Math.max(34, Math.min(W - 34, lx));
+     const bedIdx = i % numBeds;
+     const bedSubIdx = Math.floor(i / numBeds);
+
+     // Tiered flower beds distributed across the meadow banks
+     const bedFrac = (bedIdx + 0.5) / numBeds;
+     const bedLy = usableMeadowTop + bedFrac * spanY + (hash(hSeed + bedIdx * 37 + 5) - 0.5) * 14;
+     const pCenter = hillPathLocalX(hill, bedLy);
+     const side = (bedIdx % 2 === 0) ? -1 : 1;
+     const bankSpan = side < 0 ? (pCenter - 48) : (W - pCenter - 48);
+
+     // Base anchor for this cluster bed
+     const lateralRatio = 0.32 + 0.52 * hash(hSeed + bedIdx * 43 + 11);
+     const bedLx = pCenter + side * Math.max(34, bankSpan * lateralRatio);
+
+     // Dense companion clustering within each bed: increases density as new plants arrive!
+     let lx = bedLx;
+     let ly = bedLy;
+     if(bedSubIdx > 0){
+      const angle = (bedSubIdx * 2.3999 + hash(t.id + 7) * 0.8);
+      const radX = (11 + bedSubIdx * 5.2) * (0.85 + hash(t.id + 11) * 0.3);
+      const radY = (7 + bedSubIdx * 3.6) * (0.85 + hash(t.id + 13) * 0.3);
+      lx += Math.cos(angle) * radX;
+      ly += Math.sin(angle) * radY;
+     } else {
+      lx += (hash(t.id + 3) - 0.5) * 8;
+      ly += (hash(t.id + 4) - 0.5) * 6;
+     }
 
      if(hill.pond){
       const normDist = Math.hypot((lx - hill.pond.lx) / (hill.pond.rx + 24), (ly - hill.pond.ly) / (hill.pond.ry + 20));
@@ -633,7 +671,8 @@
       lx = Math.max(34, Math.min(W - 34, lx + (lx >= hill.cozyNook.lx ? 30 : -30)));
      }
 
-     const state = dueState(t);
+     lx = Math.max(32, Math.min(W - 32, lx));
+     ly = Math.max(usableMeadowTop - 10, Math.min(usableMeadowBottom + 12, ly));
      const level = t.level || 0;
      const species = speciesForTopic(t, i, hill);
      const fallenPetals = Array.from({ length: 4 }, (_, k) => ({
@@ -996,12 +1035,13 @@
  };
 
  /* Card-Stack Drag / Flick / Tap Interactions */
- let downX = 0, downY = 0, lastMoveY = 0, lastMoveTime = 0;
+ let downX = 0, downY = 0, lastMoveY = 0, lastMoveX = 0, lastMoveTime = 0;
  let dragging = false, didDrag = false;
+ let lastTapTime = 0;
 
  sceneEl.addEventListener('pointerdown', (e) => {
-  if(e.target.closest('button') || e.target.closest('.garden-specimen-card') || e.target.closest('.garden-biome-bar') || e.target.closest('.garden-stack-rail') || e.target.closest('.garden-stack-controls')) return;
-  downX = e.clientX;
+  if(e.target.closest('button') || e.target.closest('.garden-specimen-card') || e.target.closest('.garden-biome-bar') || e.target.closest('.garden-stack-rail') || e.target.closest('.garden-stack-controls') || e.target.closest('.garden-zoom-bar')) return;
+  downX = lastMoveX = e.clientX;
   downY = lastMoveY = e.clientY;
   lastMoveTime = performance.now();
   dragging = true;
@@ -1018,20 +1058,30 @@
 
   const now = performance.now();
   const dt = Math.max(1, now - lastMoveTime);
+  const dx = e.clientX - lastMoveX;
   const dy = e.clientY - lastMoveY;
 
-  if(Math.hypot(e.clientX - downX, e.clientY - downY) > 7){
+  if(Math.hypot(e.clientX - downX, e.clientY - downY) > 6){
    didDrag = true;
   }
 
-  if(didDrag && hillCards.length > 1){
-   // Dragging down pulls the next hill card behind forward; dragging up pushes previous hill card back up
-   const deltaCards = dy / (H * 0.34);
-   const maxIdx = hillCards.length - 1;
-   activeHillPos = Math.max(-0.22, Math.min(maxIdx + 0.22, activeHillPos + deltaCards));
-   activeHillVel = (deltaCards / dt) * 16.6;
+  if(didDrag){
+   if(gardenCurrentZoom > 1.08){
+    // In zoom mode: dragging smoothly pans the view to inspect any area
+    const maxPanX = W * 0.44 * (gardenCurrentZoom - 0.7);
+    const maxPanY = H * 0.32 * (gardenCurrentZoom - 0.7);
+    targetPanX = Math.max(-maxPanX, Math.min(maxPanX, targetPanX + dx));
+    targetPanY = Math.max(-maxPanY, Math.min(maxPanY, targetPanY + dy));
+   } else if(hillCards.length > 1){
+    // In fit mode: dragging flips hill cards in the stack
+    const deltaCards = dy / (H * 0.34);
+    const maxIdx = hillCards.length - 1;
+    activeHillPos = Math.max(-0.22, Math.min(maxIdx + 0.22, activeHillPos + deltaCards));
+    activeHillVel = (deltaCards / dt) * 16.6;
+   }
   }
 
+  lastMoveX = e.clientX;
   lastMoveY = e.clientY;
   lastMoveTime = now;
  });
@@ -1040,12 +1090,28 @@
   if(!dragging) return;
   dragging = false;
   if(didDrag){
-   // Snap to nearest hill card in stack
-   const maxIdx = Math.max(0, hillCards.length - 1);
-   const projected = activeHillPos + activeHillVel * 6.5;
-   targetHillIdx = Math.max(0, Math.min(maxIdx, Math.round(projected)));
+   if(gardenCurrentZoom <= 1.08){
+    // Snap to nearest hill card in stack
+    const maxIdx = Math.max(0, hillCards.length - 1);
+    const projected = activeHillPos + activeHillVel * 6.5;
+    targetHillIdx = Math.max(0, Math.min(maxIdx, Math.round(projected)));
+   }
    return;
   }
+
+  const now = performance.now();
+  if(now - lastTapTime < 290){
+   // Double tap detected: toggle zoom!
+   if(gardenZoomLevel > 1.15){
+    window.resetZoomGarden();
+   } else {
+    gardenZoomLevel = 1.45;
+    updateGardenZoomUI();
+   }
+   lastTapTime = 0;
+   return;
+  }
+  lastTapTime = now;
 
   const rect = sceneEl.getBoundingClientRect();
   const sx = e.clientX - rect.left;
@@ -1239,6 +1305,13 @@
  let wheelCooldown = 0;
  sceneEl.addEventListener('wheel', (e) => {
   e.preventDefault();
+  // Pinch-to-zoom / Ctrl+Wheel zoom support
+  if(e.ctrlKey || e.metaKey || e.altKey){
+   const zoomDelta = e.deltaY < 0 ? 0.12 : -0.12;
+   gardenZoomLevel = Math.max(0.72, Math.min(2.1, gardenZoomLevel + zoomDelta));
+   updateGardenZoomUI();
+   return;
+  }
   if(hillCards.length <= 1) return;
   const now = performance.now();
   if(now - wheelCooldown < 240) return;
@@ -1247,6 +1320,55 @@
    window.stepHillCard(e.deltaY > 0 ? 1 : -1);
   }
  }, { passive: false });
+
+ // Multi-touch pinch zoom support
+ let touchDist0 = null;
+ let initialZoom0 = 1.0;
+
+ sceneEl.addEventListener('touchstart', (e) => {
+  if(e.touches.length === 2){
+   touchDist0 = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+   initialZoom0 = gardenZoomLevel;
+  }
+ }, { passive: true });
+
+ sceneEl.addEventListener('touchmove', (e) => {
+  if(e.touches.length === 2 && touchDist0){
+   const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+   gardenZoomLevel = Math.max(0.72, Math.min(2.1, initialZoom0 * (dist / touchDist0)));
+   updateGardenZoomUI();
+  }
+ }, { passive: true });
+
+ sceneEl.addEventListener('touchend', (e) => {
+  if(e.touches.length < 2) touchDist0 = null;
+ }, { passive: true });
+
+ window.zoomInGarden = function(){
+  gardenZoomLevel = Math.min(2.1, gardenZoomLevel + 0.25);
+  updateGardenZoomUI();
+ };
+ window.zoomOutGarden = function(){
+  gardenZoomLevel = Math.max(0.72, gardenZoomLevel - 0.20);
+  if(gardenZoomLevel <= 1.05){ targetPanX = 0; targetPanY = 0; }
+  updateGardenZoomUI();
+ };
+ window.resetZoomGarden = function(){
+  gardenZoomLevel = 1.0;
+  targetPanX = 0;
+  targetPanY = 0;
+  updateGardenZoomUI();
+ };
+ function updateGardenZoomUI(){
+  const el = document.getElementById('gardenZoomLabel');
+  if(el){
+   if(Math.abs(gardenZoomLevel - 1.0) < 0.04){
+    el.textContent = 'Fit';
+   } else {
+    el.textContent = Math.round(gardenZoomLevel * 100) + '%';
+   }
+  }
+ }
 
  function easeOutBack(x){
   const c1 = 1.70158;
@@ -3322,6 +3444,11 @@
     }
    }
   }
+
+  // Smoothly lerp interactive zoom and pan offsets
+  gardenCurrentZoom += (gardenZoomLevel - gardenCurrentZoom) * Math.min(1, dt * 7.5);
+  gardenPanX += (targetPanX - gardenPanX) * Math.min(1, dt * 8.5);
+  gardenPanY += (targetPanY - gardenPanY) * Math.min(1, dt * 8.5);
 
   syncActiveHillHUD();
   updateActiveRabbits(dt, t);

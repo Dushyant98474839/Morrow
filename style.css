@@ -530,6 +530,52 @@ input:focus,select:focus{border-color:var(--sage)}
   -webkit-backdrop-filter:blur(12px);
   transition:opacity .22s ease,transform .22s ease;
 }
+.garden-zoom-bar{
+  position:absolute;
+  right:16px;
+  bottom:calc(env(safe-area-inset-bottom,0px) + 92px);
+  z-index:5;
+  height:34px;
+  display:inline-flex;
+  align-items:center;
+  gap:2px;
+  padding:2px 4px;
+  border-radius:999px;
+  border:1px solid rgba(255,253,247,.56);
+  background:rgba(40,58,44,.32);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  box-shadow:0 6px 18px rgba(18,28,20,.16);
+  user-select:none;
+}
+.garden-zoom-btn{
+  height:28px;
+  min-width:28px;
+  padding:0 6px;
+  border:0;
+  background:transparent;
+  color:#fffdf7;
+  font:600 13px 'DM Sans',sans-serif;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:999px;
+  cursor:pointer;
+  transition:background .18s ease, transform .15s ease;
+}
+.garden-zoom-btn:hover{
+  background:rgba(255,253,247,.20);
+  transform:scale(1.08);
+}
+.garden-zoom-btn:active{
+  transform:scale(0.92);
+}
+.garden-zoom-label{
+  font:600 11px 'DM Sans',sans-serif;
+  padding:0 6px;
+  color:rgba(255,253,247,.92);
+  cursor:pointer;
+}
 .garden-stack-controls.hidden{opacity:0;pointer-events:none;transform:translateY(6px)}
 .stack-step-btn{
   width:28px;
