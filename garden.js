@@ -253,27 +253,23 @@
   }
  }
 
- window.focusHillCard = function(idx, whisper = true){
+ window.focusHillCard = function(idx){
   if(!hillCards.length) return;
   const clamped = Math.max(0, Math.min(hillCards.length - 1, idx));
   closeSpecimenCard();
   targetHillIdx = clamped;
   activeHillVel = 0;
-  const hill = hillCards[clamped];
-  if(whisper && hill){
-   showWhisper(`${hill.archetype.icon} ${hill.subject} · ${hill.archetype.label}`);
-  }
  };
 
  window.stepHillCard = function(dir){
   const cur = Math.round(targetHillIdx !== null ? targetHillIdx : activeHillPos);
   const next = Math.max(0, Math.min(hillCards.length - 1, cur + dir));
-  window.focusHillCard(next, true);
+  window.focusHillCard(next);
  };
 
  window.focusBiomeBySubject = function(subj){
   const idx = hillCards.findIndex(h => h.subject.toLowerCase() === String(subj || '').toLowerCase());
-  if(idx !== -1) window.focusHillCard(idx, true);
+  if(idx !== -1) window.focusHillCard(idx);
  };
 
  function updateDuePill(){
@@ -1048,7 +1044,7 @@
     const clampedNx = Math.max(0, Math.min(1, localNx));
     const bgCrestAtX = bgPose.crestY + hillCrestOffset(bgHill, clampedNx) * bgPose.scale;
     if(sy >= bgCrestAtX - 14){
-     window.focusHillCard(i, true);
+     window.focusHillCard(i);
      return;
     }
    }
