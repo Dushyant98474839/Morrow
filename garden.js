@@ -526,12 +526,11 @@
      lx: initLx,
      ly: tr.ly + 4,
      dir: tr.lx < W * 0.5 ? 1 : -1,
-     state: 'nibble', // 'nibble', 'hop', 'scamper', 'lookout'
-     timer: 1.5 + hash(hSeed + 601) * 2,
-     speed: 0,
-     hopPhase: 0,
-     hopAmp: 0,
-     scamperBoost: 0,
+     state: 'nibble', // 'nibble', 'scamper', 'lookout'
+     timer: 2.0 + hash(hSeed + 601) * 2,
+     boundsLeft: 0,
+     boundTime: 0,
+     boundPause: 0,
      phase: hash(hSeed + 607) * Math.PI * 2
     };
    }
@@ -1157,15 +1156,15 @@
    }
   }
 
-  // 9. Hit-test Squirrel (hops & scampers away!)
+  // 9. Hit-test Squirrel (natural hopping scamper away!)
   if(frontHill.squirrel && Math.hypot(lx - frontHill.squirrel.lx, ly - frontHill.squirrel.ly) < 32){
-   frontHill.squirrel.scamperBoost = 2.5;
    frontHill.squirrel.state = 'scamper';
-   frontHill.squirrel.speed = 105;
-   frontHill.squirrel.timer = 1.8;
+   frontHill.squirrel.boundsLeft = 3;
+   frontHill.squirrel.boundTime = 0;
+   frontHill.squirrel.boundPause = 0;
    frontHill.squirrel.dir = (lx < frontHill.squirrel.lx ? 1 : -1);
    spawnPetals(sx, sy - 10, '#d98b58', 5);
-   showWhisper('A playful squirrel hops and scampers across the grass! 🐿️💨');
+   showWhisper('A playful squirrel bounds across the meadow! 🐿️');
    return;
   }
 
@@ -2489,232 +2488,211 @@
   ctx.restore();
  }
 
- // ── Squirrel (Hopping, Scampering & Foraging) ────────────────────────────
+ // ── Squirrel (Natural Discrete Bounding & Foraging) ────────────────────
  function drawSquirrel(sq, hill, pal, t, dt){
-  sq.timer -= dt;
-  if(sq.scamperBoost > 0) sq.scamperBoost = Math.max(0, sq.scamperBoost - dt * 1.5);
-
-  // Tree shake reaction: if tree shakes, squirrel dashes!
+  // Check tree shake reaction: startle into scampering bounds!
   const tr = hill.trees[sq.treeIdx % hill.trees.length];
-  if(tr && tr.shake > 0.35 && sq.state !== 'scamper'){
-   sq.scamperBoost = 2.4;
+  if(tr && tr.shake > 0.35 && sq.boundsLeft <= 0){
    sq.state = 'scamper';
-   sq.timer = 1.6;
-   sq.speed = 100;
+   sq.boundsLeft = 3;
+   sq.boundTime = 0;
+   sq.boundPause = 0;
    sq.dir = sq.lx < tr.lx ? -1 : 1;
   }
 
-  // State transitions
-  if(sq.timer <= 0){
-   if(sq.scamperBoost > 0.2){
-    sq.state = 'scamper';
-    sq.timer = 1.2 + Math.random() * 1.2;
-    sq.speed = 90 + Math.random() * 30;
-    sq.dir = Math.random() < 0.5 ? -1 : 1;
-   } else if(sq.state === 'scamper' || sq.state === 'hop'){
-    // Stop hopping to nibble or stand on lookout
-    sq.state = Math.random() < 0.65 ? 'nibble' : 'lookout';
-    sq.timer = 1.8 + Math.random() * 2.6;
-    sq.speed = 0;
-    sq.hopAmp = 0;
+  let hopY = 0;
+  let tilt = 0;
+  let tailLag = 0;
+
+  // Active Scampering: series of discrete, smooth, parabolic bounds
+  if(sq.boundsLeft > 0){
+   if(sq.boundPause > 0){
+    // Brief pause between bounds with feet planted on the ground
+    sq.boundPause -= dt;
    } else {
-    // From stationary to hopping or scampering!
+    // Progress of single discrete bound (lasts 0.24s)
+    const boundDuration = 0.24;
+    sq.boundTime += dt;
+    const progress = Math.min(1, sq.boundTime / boundDuration);
+
+    // Smooth parabolic bounce arc
+    hopY = -Math.sin(progress * Math.PI) * 7.0;
+    tilt = Math.sin(progress * Math.PI) * 0.16;
+    tailLag = -Math.sin(progress * Math.PI) * 0.22;
+
+    // Advance across ground
+    const stepSpeed = 85; // px/sec during the bound
+    sq.lx += sq.dir * stepSpeed * dt;
+    if(sq.lx < 36){ sq.lx = 36; sq.dir = 1; }
+    if(sq.lx > W - 36){ sq.lx = W - 36; sq.dir = -1; }
+
+    // Finished this bound!
+    if(progress >= 1){
+     sq.boundTime = 0;
+     sq.boundsLeft--;
+     if(sq.boundsLeft > 0){
+      sq.boundPause = 0.08 + Math.random() * 0.08; // natural tiny pause
+     } else {
+      // Completed all bounds: land and rest/nibble
+      sq.state = Math.random() < 0.65 ? 'nibble' : 'lookout';
+      sq.timer = 2.0 + Math.random() * 2.8;
+     }
+    }
+   }
+  } else {
+   // Stationary state: timer counts down to next action
+   sq.timer -= dt;
+   if(sq.timer <= 0){
     const roll = Math.random();
-    if(roll < 0.45){
-     sq.state = 'hop';
-     sq.timer = 1.0 + Math.random() * 1.5;
-     sq.dir = Math.random() < 0.5 ? -1 : 1;
-     if(sq.lx < 45) sq.dir = 1;
-     if(sq.lx > W - 45) sq.dir = -1;
-     sq.speed = 40 + Math.random() * 25;
-    } else if(roll < 0.78){
+    if(roll < 0.55){
+     // Start a scamper run: 2 to 3 discrete little bounds
      sq.state = 'scamper';
-     sq.timer = 1.2 + Math.random() * 1.6;
-     sq.dir = Math.random() < 0.5 ? -1 : 1;
-     if(sq.lx < 45) sq.dir = 1;
-     if(sq.lx > W - 45) sq.dir = -1;
-     sq.speed = 78 + Math.random() * 35;
+     sq.boundsLeft = 2 + Math.floor(Math.random() * 2);
+     sq.boundTime = 0;
+     sq.boundPause = 0;
+     // Turn around if near edge, else 50/50
+     if(sq.lx < 46) sq.dir = 1;
+     else if(sq.lx > W - 46) sq.dir = -1;
+     else if(Math.random() < 0.4) sq.dir *= -1;
     } else {
+     // Switch between nibble and lookout posture
      sq.state = sq.state === 'nibble' ? 'lookout' : 'nibble';
-     sq.timer = 1.5 + Math.random() * 2.5;
-     if(Math.random() < 0.4) sq.dir *= -1;
-     sq.speed = 0;
-     sq.hopAmp = 0;
+     sq.timer = 1.8 + Math.random() * 2.5;
+     if(Math.random() < 0.3) sq.dir *= -1;
     }
    }
   }
 
-  // Movement & Hopping
-  const isMoving = sq.state === 'scamper' || sq.state === 'hop';
-  if(isMoving){
-   const moveSpeed = (sq.speed || 45) * (1 + sq.scamperBoost * 0.75);
-   sq.lx += sq.dir * moveSpeed * dt;
-   if(sq.lx < 34){ sq.lx = 34; sq.dir = 1; }
-   if(sq.lx > W - 34){ sq.lx = W - 34; sq.dir = -1; }
-
-   const hopRate = sq.state === 'scamper' ? 8.6 : 5.4;
-   sq.hopPhase = (sq.hopPhase + dt * hopRate) % 1;
-   sq.hopAmp = Math.abs(Math.sin(sq.hopPhase * Math.PI));
-  } else {
-   sq.hopAmp = 0;
-  }
-
   const col = pal.isNight ? '#62412e' : '#b25e32';
+  const colDark = pal.isNight ? '#4e3324' : '#8e4620';
   const belly = pal.isNight ? '#e2d6c6' : '#fcf4ea';
   const shadow = pal.isNight ? 'rgba(16,26,20,0.25)' : 'rgba(28,42,28,0.18)';
-  const hopY = -sq.hopAmp * (sq.state === 'scamper' ? 7.5 : 5.0);
-  const twitch = Math.sin(t * 8 + sq.phase) * (sq.state === 'nibble' ? 0.16 : 0.08);
 
   ctx.save();
   ctx.translate(sq.lx, sq.ly + hopY);
   ctx.scale(sq.dir, 1);
+  if(tilt) ctx.rotate(tilt);
 
-  // Shadow
+  // 1. Soft ground shadow
+  const shadowScale = Math.max(0.65, 1 - Math.abs(hopY) * 0.07);
   ctx.fillStyle = shadow;
   ctx.beginPath();
-  ctx.ellipse(0, 3 - hopY * 0.2, (isMoving ? 11 : 9) * (1 - sq.hopAmp * 0.25), 3, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 3 - hopY * 0.3, 10 * shadowScale, 3.2 * shadowScale, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Bushy Tail: streams behind dynamically when hopping, curls up over back when sitting
+  // 2. Bushy Tail (Smooth, lush, continuous S-curve over back with gentle inertia)
+  const isNibbling = sq.state === 'nibble' && sq.boundsLeft <= 0;
+  const tailWiggle = Math.sin(t * 5 + sq.phase) * 0.12 + tailLag;
   ctx.save();
-  if(isMoving){
-   ctx.translate(-5, -2);
-   const tailWave = Math.sin(sq.hopPhase * Math.PI * 2) * 0.28;
-   ctx.rotate(-0.45 + tailWave);
-   ctx.fillStyle = col;
-   ctx.beginPath();
-   ctx.moveTo(0, 0);
-   ctx.quadraticCurveTo(-14, 4, -20, -3);
-   ctx.quadraticCurveTo(-24, -9, -15, -12);
-   ctx.quadraticCurveTo(-6, -11, 0, 0);
-   ctx.fill();
-   ctx.fillStyle = pal.isNight ? '#7a5440' : '#c9784a';
-   ctx.beginPath();
-   ctx.ellipse(-14, -5, 5, 3.2, -0.2, 0, Math.PI * 2);
-   ctx.fill();
-  } else {
-   ctx.translate(-4, -1);
-   ctx.rotate(twitch);
-   ctx.fillStyle = col;
-   ctx.beginPath();
-   ctx.moveTo(0, 0);
-   ctx.quadraticCurveTo(-10, -5, -8, -14);
-   ctx.quadraticCurveTo(-6, -20, 2, -18);
-   ctx.quadraticCurveTo(8, -16, 6, -10);
-   ctx.quadraticCurveTo(4, -4, 0, 0);
-   ctx.fill();
-   ctx.fillStyle = pal.isNight ? '#7a5440' : '#c9784a';
-   ctx.beginPath();
-   ctx.ellipse(-2, -12, 3.5, 6, 0.2, 0, Math.PI * 2);
-   ctx.fill();
-  }
+  ctx.translate(-4, -1);
+  ctx.rotate(tailWiggle);
+
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.quadraticCurveTo(-11, -4, -9, -15);
+  ctx.quadraticCurveTo(-7, -23, 2, -21);
+  ctx.quadraticCurveTo(9, -18, 7, -11);
+  ctx.quadraticCurveTo(5, -4, 0, 0);
+  ctx.fill();
+
+  // Inner fluffy highlight
+  ctx.fillStyle = pal.isNight ? '#7a5440' : '#c9784a';
+  ctx.beginPath();
+  ctx.ellipse(-2, -13, 3.8, 6.5, 0.22, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 
-  // Body & Head
+  // 3. Back Haunch / Thigh
+  ctx.fillStyle = colDark;
+  ctx.beginPath();
+  ctx.ellipse(-1, 0, 4.5, 3.8, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 4. Rounded Body & Chest
+  const isLookout = sq.state === 'lookout' && sq.boundsLeft <= 0;
+  const bodyH = isLookout ? 7.0 : 6.0;
+  const bodyY = isLookout ? -4.5 : -3.2;
+
   ctx.fillStyle = col;
-  if(isMoving){
-   // Quadruped bounding posture
-   ctx.beginPath();
-   ctx.ellipse(2, -2, 7, 4.2, -0.15, 0, Math.PI * 2);
-   ctx.fill();
-   ctx.fillStyle = belly;
-   ctx.beginPath();
-   ctx.ellipse(2, -0.5, 5, 2.8, -0.1, 0, Math.PI * 2);
-   ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(1.5, bodyY, 5.0, bodyH, 0.16, 0, Math.PI * 2);
+  ctx.fill();
 
-   // Head
-   ctx.fillStyle = col;
+  // Cream Belly
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.ellipse(3.0, bodyY + 0.4, 2.6, bodyH * 0.72, 0.12, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 5. Head
+  const headY = isLookout ? -12.2 : -9.4;
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.arc(4.0, headY, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Snout
+  ctx.beginPath();
+  ctx.ellipse(6.6, headY + 0.5, 2.2, 1.8, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Nose
+  ctx.fillStyle = '#2c1e18';
+  ctx.beginPath();
+  ctx.arc(8.4, headY + 0.5, 0.75, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Ear with tuft
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(2.8, headY - 3.0);
+  ctx.lineTo(4.4, headY - 6.8);
+  ctx.lineTo(6.0, headY - 3.0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = pal.isNight ? '#725048' : '#e5a59b';
+  ctx.beginPath();
+  ctx.moveTo(3.6, headY - 3.2);
+  ctx.lineTo(4.4, headY - 5.6);
+  ctx.lineTo(5.2, headY - 3.2);
+  ctx.closePath();
+  ctx.fill();
+
+  // Eye (with white catchlight glint)
+  ctx.fillStyle = pal.isNight ? '#c09880' : '#1e140e';
+  ctx.beginPath();
+  ctx.arc(4.8, headY - 0.5, 1.0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.beginPath();
+  ctx.arc(5.1, -0.8 + headY, 0.35, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 6. Front Paws & Acorn
+  const pawTwitch = isNibbling ? Math.sin(t * 16) * 0.5 : 0;
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.ellipse(4.8, headY + 4.8 + pawTwitch, 1.8, 1.3, -0.25, 0, Math.PI * 2);
+  ctx.fill();
+
+  if(isNibbling){
+   // Acorn with cap held in paws
+   ctx.fillStyle = pal.isNight ? '#785b3a' : '#8e5927';
    ctx.beginPath();
-   ctx.arc(8, -5, 3.4, 0, Math.PI * 2);
+   ctx.ellipse(6.8, headY + 4.8 + pawTwitch, 1.7, 2.2, 0.35, 0, Math.PI * 2);
    ctx.fill();
-
-   // Snout
+   ctx.fillStyle = pal.isNight ? '#553d24' : '#693f18';
    ctx.beginPath();
-   ctx.ellipse(10.5, -4.5, 1.8, 1.5, 0.1, 0, Math.PI * 2);
-   ctx.fill();
-
-   // Ear with tuft
-   ctx.beginPath();
-   ctx.moveTo(6.5, -8);
-   ctx.lineTo(8, -11.5);
-   ctx.lineTo(9.5, -8);
-   ctx.closePath();
-   ctx.fill();
-
-   // Eye
-   ctx.fillStyle = pal.isNight ? '#c09880' : '#1e140e';
-   ctx.beginPath();
-   ctx.arc(8.6, -5.5, 0.9, 0, Math.PI * 2);
-   ctx.fill();
-
-   // Paws hopping
-   ctx.fillStyle = col;
-   const legExt = Math.sin(sq.hopPhase * Math.PI) * 3;
-   ctx.beginPath();
-   ctx.ellipse(-3 + legExt, 3, 2.5, 1.4, -0.2, 0, Math.PI * 2);
-   ctx.ellipse(5 - legExt, 3, 2.2, 1.4, 0.2, 0, Math.PI * 2);
-   ctx.fill();
-  } else {
-   // Upright sitting / lookout posture
-   const isLookout = sq.state === 'lookout';
-   const bodyH = isLookout ? 7.2 : 6.0;
-   const bodyY = isLookout ? -4.5 : -3;
-
-   ctx.beginPath();
-   ctx.ellipse(1, bodyY, 4.8, bodyH, 0.15, 0, Math.PI * 2);
-   ctx.fill();
-
-   ctx.fillStyle = belly;
-   ctx.beginPath();
-   ctx.ellipse(2.5, bodyY + 0.5, 2.6, bodyH * 0.72, 0.1, 0, Math.PI * 2);
-   ctx.fill();
-
-   // Head
-   const headY = isLookout ? -12 : -9;
-   ctx.fillStyle = col;
-   ctx.beginPath();
-   ctx.arc(3.5, headY, 3.4, 0, Math.PI * 2);
-   ctx.fill();
-
-   // Snout
-   ctx.beginPath();
-   ctx.ellipse(6, headY + 0.5, 2.0, 1.6, 0.1, 0, Math.PI * 2);
-   ctx.fill();
-
-   // Ear with tuft
-   ctx.beginPath();
-   ctx.moveTo(2.5, headY - 3);
-   ctx.lineTo(4, headY - 6.5);
-   ctx.lineTo(5.5, headY - 3);
-   ctx.closePath();
-   ctx.fill();
-
-   // Eye
-   ctx.fillStyle = pal.isNight ? '#c09880' : '#1e140e';
-   ctx.beginPath();
-   ctx.arc(4.2, headY - 0.5, 0.9, 0, Math.PI * 2);
-   ctx.fill();
-
-   // Front paws
-   ctx.fillStyle = col;
-   ctx.beginPath();
-   ctx.ellipse(4.5, headY + 4.5, 1.8, 1.2, -0.2, 0, Math.PI * 2);
-   ctx.fill();
-
-   if(sq.state === 'nibble'){
-    // Acorn
-    ctx.fillStyle = pal.isNight ? '#785b3a' : '#8e5927';
-    ctx.beginPath();
-    ctx.ellipse(6.2, headY + 4.2, 1.6, 2.2, 0.3, 0, Math.PI * 2);
-    ctx.fill();
-   }
-
-   // Feet
-   ctx.fillStyle = col;
-   ctx.beginPath();
-   ctx.ellipse(1.5, 3.5, 3.8, 1.5, 0, 0, Math.PI * 2);
+   ctx.arc(6.2, headY + 3.3 + pawTwitch, 1.4, 0, Math.PI * 2);
    ctx.fill();
   }
+
+  // 7. Feet
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.ellipse(1.5, 3.4, 3.8, 1.6, 0.05, 0, Math.PI * 2);
+  ctx.fill();
 
   ctx.restore();
  }
