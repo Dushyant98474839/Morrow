@@ -11,7 +11,7 @@ body{margin:0;background:#e9e4d9;color:var(--ink);font-family:'DM Sans',sans-ser
 .top{padding:23px 25px 12px;display:flex;justify-content:space-between;align-items:center}
 .eyebrow{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:700}
 h1{font:500 34px/1.1 'Fraunces',serif;margin:7px 0 0;letter-spacing:-.04em}
-.icon-btn{border:1px solid var(--line);background:var(--card);width:42px;height:42px;border-radius:50%;font-size:18px;color:var(--ink);cursor:pointer}
+.icon-btn{border:1px solid var(--line);background:var(--card);width:42px;height:42px;border-radius:50%;font-size:18px;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
 main{padding:10px 20px 94px;flex:1;overflow:auto}
 .summary{background:var(--card);border:1px solid #eee7da;border-radius:24px;padding:20px 20px 18px;margin:4px 0 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 7px 24px rgba(77,67,49,.035)}
 .count{font:500 54px/.95 'Fraunces',serif;letter-spacing:-.06em}
@@ -1225,21 +1225,63 @@ input:focus,select:focus{border-color:var(--sage)}
 /* Daily Reminders Styling */
 .reminder-bell-btn{
   position:relative;
-  font-size:15px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  color:#6f7468;
+  transition:all .22s ease;
+}
+.reminder-bell-btn:hover{
+  color:var(--sage-dark);
+  border-color:rgba(101,121,92,.35);
+  background:#f8f7f0;
+}
+.reminder-bell-icon{
+  width:18px;
+  height:18px;
+  display:block;
+  stroke:currentColor;
+  fill:transparent;
+  transition:transform .3s ease, fill .2s ease, stroke .2s ease;
+  transform-origin:top center;
+}
+.reminder-bell-btn:hover .reminder-bell-icon{
+  animation:bell-gentle-chime 0.6s cubic-bezier(.36,.07,.19,.97);
+}
+@keyframes bell-gentle-chime{
+  0%, 100%{ transform: rotate(0deg); }
+  20%{ transform: rotate(11deg); }
+  40%{ transform: rotate(-9deg); }
+  60%{ transform: rotate(5deg); }
+  80%{ transform: rotate(-2deg); }
+}
+.reminder-bell-btn.active{
+  color:var(--sage-dark);
+  background:var(--sage-pale);
+  border-color:rgba(101,121,92,.28);
+}
+.reminder-bell-btn.active .reminder-bell-icon{
+  fill:rgba(101,121,92,.14);
+  stroke:var(--sage-dark);
 }
 .reminder-dot{
   position:absolute;
-  top:5px;
-  right:5px;
+  top:8px;
+  right:8px;
   width:7px;
   height:7px;
   border-radius:50%;
   background:var(--sage-dark);
-  border:1.5px solid #fff;
+  border:1.5px solid var(--card);
   display:none;
+  transition:all .2s ease;
 }
 .reminder-dot.active{
   display:block;
+}
+.reminder-bell-btn.active .reminder-dot{
+  border-color:var(--sage-pale);
+  background:var(--sage-dark);
 }
 .reminder-perm-box{
   display:flex;
@@ -1336,6 +1378,17 @@ input:focus,select:focus{border-color:var(--sage)}
 .progress-reminder-card:hover{
   background:rgba(255,254,249,.96);
   border-color:rgba(133,145,112,.35);
+}
+.progress-reminder-icon-wrap{
+  width:36px;
+  height:36px;
+  border-radius:11px;
+  background:rgba(130,148,119,.13);
+  color:var(--sage-dark);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:none;
 }
 
 

@@ -863,6 +863,7 @@ function render(){
  document.getElementById('totalStat').textContent=topics.length;
  document.getElementById('doneStat').textContent=completed;
  renderGarden();
+ updateReminderUI();
 }
 
 function dateValue(ts){
@@ -1496,12 +1497,25 @@ function updateReminderPermBox(){
 function updateReminderUI(){
  const s = getReminderSettings();
  const dot = document.getElementById('reminderStatusDot');
+ const btn = document.getElementById('reminderBellBtn');
  const isAnyActive = s.enabled && (s.morningEnabled || s.nightEnabled);
+ const isGrantedAndActive = isAnyActive && ('Notification' in window && Notification.permission === 'granted');
  if(dot){
-  if(isAnyActive && ('Notification' in window && Notification.permission === 'granted')){
+  if(isGrantedAndActive){
    dot.classList.add('active');
   } else {
    dot.classList.remove('active');
+  }
+ }
+ if(btn){
+  if(isGrantedAndActive){
+   btn.classList.add('active');
+   btn.title = 'Daily reminders active · Tap to configure';
+   btn.setAttribute('aria-label', 'Daily reminders active · Tap to configure');
+  } else {
+   btn.classList.remove('active');
+   btn.title = 'Daily reminders · Tap to configure';
+   btn.setAttribute('aria-label', 'Daily reminders · Tap to configure');
   }
  }
  const summaryEl = document.getElementById('progressReminderSummary');
