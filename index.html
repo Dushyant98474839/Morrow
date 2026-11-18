@@ -448,5 +448,10 @@
 </div>
 <script src="app.js"></script>
 <script src="garden.js"></script>
+<script>
+if (new URLSearchParams(window.location.search).get('view') === 'garden') {
+  showView('garden', document.getElementById('gardenNavBtn'));
+}
+</script>
 </body>
 </html>

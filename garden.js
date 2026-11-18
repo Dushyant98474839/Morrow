@@ -104,7 +104,8 @@
  }
 
  function missionSeed(){
-  return stringHash(activeMissionId || 'upsc');
+  const mId = typeof activeMissionId !== 'undefined' ? activeMissionId : (typeof currentMission === 'function' ? currentMission().id : 'upsc');
+  return stringHash(mId || 'upsc');
  }
 
  function speciesForTopic(t, idx, hill){
@@ -501,17 +502,17 @@
     hill.stones.push({ lx: stX, ly: stLy, r: 8 + hash(hSeed + 73) * 4, kind: archetype.id });
    }
 
-   for(let g = 0; g < 11; g++){
-    const gx = (0.08 + hash(hSeed + g * 13 + 300) * 0.84) * W;
+   for(let g = 0; g < 16; g++){
+    const gx = (0.03 + hash(hSeed + g * 13 + 300) * 0.94) * W;
     const gy = 26 + hash(hSeed + g * 17 + 400) * (usableMeadowBottom - 24);
-    if(Math.abs(gx - hillPathLocalX(hill, gy)) < 30) continue;
+    if(Math.abs(gx - hillPathLocalX(hill, gy)) < 26) continue;
     if(hill.pond && Math.hypot((gx - hill.pond.lx) / 1.5, gy - hill.pond.ly) < hill.pond.rx + 12) continue;
     hill.tufts.push({
      lx: gx,
      ly: gy,
      seed: g + idx * 31,
      floraKind: archetype.id,
-     hasTinyBlossom: g % 4 === 0
+     hasTinyBlossom: g % 3 === 0
     });
    }
 
@@ -622,25 +623,33 @@
     const spanY = usableMeadowBottom - usableMeadowTop;
     const goldenRatio = 0.6180339887;
 
+    // Minimum required size reduction ONLY when plants start crowding / clipping outside hill bounds
+    // Up to 8 topics: 100% full size (~0.95-1.03x). Above 8: gently scale to minimum required factor
+    const clipThreshold = 8;
+    const shrinkFactor = count <= clipThreshold
+      ? 1.0
+      : Math.max(0.70, 1.0 - (count - clipThreshold) * 0.016);
+
     // 1. Organic distribution along the hillside using low-discrepancy golden ratio
+    // Populate full width of meadow flanks towards edges (not artificially squeezed to center)
     const tentativePlants = subjTopics.map((t, i) => {
      const prev = prevPlantMap.get(t.id);
      const rank = count === 1 ? 0.45 : (i + 0.35) / count;
      const ly = usableMeadowTop + rank * spanY + (hash(hSeed + t.id * 7 + 2) - 0.5) * (count > 6 ? 14 : 8);
      const pCenter = hillPathLocalX(hill, ly);
 
-     // Alternating banks with natural golden-ratio lateral spread
+     // Alternating banks with natural golden-ratio lateral spread covering full meadow flanks
      const side = ((i + idx + Math.floor(hash(t.id + 5) * 2)) % 2 === 0) ? -1 : 1;
-     const bankSpan = side < 0 ? (pCenter - 48) : (W - pCenter - 48);
-     const lateralRatio = 0.28 + 0.60 * ((i * goldenRatio + hash(t.id + 1) * 0.35) % 1);
-     let lx = pCenter + side * Math.max(34, bankSpan * lateralRatio);
-     lx = Math.max(34, Math.min(W - 34, lx));
+     const bankSpan = side < 0 ? (pCenter - 14) : (W - pCenter - 14);
+     const lateralRatio = 0.16 + 0.82 * ((i * goldenRatio + hash(t.id + 1) * 0.35) % 1);
+     let lx = pCenter + side * Math.max(16, bankSpan * lateralRatio);
+     lx = Math.max(14, Math.min(W - 14, lx));
 
      return { t, i, prev, lx, ly };
     });
 
     // 2. Collision relaxation pass: ensures every flower has breathing room and never awkwardly collides
-    const minDist = 32;
+    const minDist = Math.max(24, 32 * shrinkFactor);
     for(let iter = 0; iter < 4; iter++){
      for(let i = 0; i < tentativePlants.length; i++){
       for(let j = i + 1; j < tentativePlants.length; j++){
@@ -653,10 +662,10 @@
         const overlap = (minDist - dist) * 0.5;
         const nx = dx / dist;
         const ny = dy / dist;
-        pi.lx = Math.max(34, Math.min(W - 34, pi.lx - nx * overlap));
-        pj.lx = Math.max(34, Math.min(W - 34, pj.lx + nx * overlap));
-        pi.ly = Math.max(usableMeadowTop - 8, Math.min(usableMeadowBottom + 12, pi.ly - ny * overlap));
-        pj.ly = Math.max(usableMeadowTop - 8, Math.min(usableMeadowBottom + 12, pj.ly + ny * overlap));
+        pi.lx = Math.max(14, Math.min(W - 14, pi.lx - nx * overlap));
+        pj.lx = Math.max(14, Math.min(W - 14, pj.lx + nx * overlap));
+        pi.ly = Math.max(usableMeadowTop + 6, Math.min(usableMeadowBottom - 6, pi.ly - ny * overlap));
+        pj.ly = Math.max(usableMeadowTop + 6, Math.min(usableMeadowBottom - 6, pj.ly + ny * overlap));
        }
       }
      }
@@ -665,21 +674,24 @@
     // 3. Obstacle avoidance & final plant object generation
     tentativePlants.forEach(({ t, i, prev, lx, ly }) => {
      if(hill.pond){
-      const normDist = Math.hypot((lx - hill.pond.lx) / (hill.pond.rx + 24), (ly - hill.pond.ly) / (hill.pond.ry + 20));
+      const normDist = Math.hypot((lx - hill.pond.lx) / (hill.pond.rx + 22), (ly - hill.pond.ly) / (hill.pond.ry + 18));
       if(normDist < 1){
        const pushSide = (hill.pond.lx < W * 0.5) ? 1 : -1;
-       lx = Math.max(34, Math.min(W - 34, hill.pond.lx + pushSide * (hill.pond.rx + 26)));
+       lx = Math.max(14, Math.min(W - 14, hill.pond.lx + pushSide * (hill.pond.rx + 24)));
       }
      }
-     if(hill.landmark && Math.hypot(lx - hill.landmark.lx, ly - hill.landmark.ly) < 34){
-      lx = Math.max(34, Math.min(W - 34, lx + (lx >= hill.landmark.lx ? 30 : -30)));
+     if(hill.landmark && Math.hypot(lx - hill.landmark.lx, ly - hill.landmark.ly) < 32){
+      lx = Math.max(14, Math.min(W - 14, lx + (lx >= hill.landmark.lx ? 28 : -28)));
      }
-     if(hill.cozyNook && Math.hypot(lx - hill.cozyNook.lx, ly - hill.cozyNook.ly) < 36){
-      lx = Math.max(34, Math.min(W - 34, lx + (lx >= hill.cozyNook.lx ? 30 : -30)));
+     if(hill.cozyNook && Math.hypot(lx - hill.cozyNook.lx, ly - hill.cozyNook.ly) < 34){
+      lx = Math.max(14, Math.min(W - 14, lx + (lx >= hill.cozyNook.lx ? 28 : -28)));
      }
 
-     lx = Math.max(32, Math.min(W - 32, lx));
-     ly = Math.max(usableMeadowTop - 10, Math.min(usableMeadowBottom + 12, ly));
+     const pScale = (0.95 + hash(t.id + 13) * 0.08) * shrinkFactor;
+     const topBound = usableMeadowTop + 14 * pScale;
+     const bottomBound = usableMeadowBottom - 6;
+     lx = Math.max(14, Math.min(W - 14, lx));
+     ly = Math.max(topBound, Math.min(bottomBound, ly));
 
      const state = dueState(t);
      const level = t.level || 0;
@@ -697,7 +709,7 @@
       lx,
       ly,
       phase: hash(t.id + 7) * Math.PI * 2,
-      scale: 0.95 + hash(t.id + 13) * 0.08, // Full prominent original size (~0.95-1.03x)
+      scale: pScale,
       state,
       level,
       species,
@@ -1315,10 +1327,15 @@
  let wheelCooldown = 0;
  sceneEl.addEventListener('wheel', (e) => {
   e.preventDefault();
-  // Pinch-to-zoom / Ctrl+Wheel zoom support
+  // Desktop Ctrl+Wheel zoom support (strictly clamped to minimum 1.0x / Fit)
   if(e.ctrlKey || e.metaKey || e.altKey){
    const zoomDelta = e.deltaY < 0 ? 0.12 : -0.12;
-   gardenZoomLevel = Math.max(0.72, Math.min(2.1, gardenZoomLevel + zoomDelta));
+   gardenZoomLevel = Math.max(1.0, Math.min(2.1, gardenZoomLevel + zoomDelta));
+   if(gardenZoomLevel <= 1.02){
+    gardenZoomLevel = 1.0;
+    targetPanX = 0;
+    targetPanY = 0;
+   }
    updateGardenZoomUI();
    return;
   }
@@ -1331,36 +1348,17 @@
   }
  }, { passive: false });
 
- // Multi-touch pinch zoom support
- let touchDist0 = null;
- let initialZoom0 = 1.0;
-
- sceneEl.addEventListener('touchstart', (e) => {
-  if(e.touches.length === 2){
-   touchDist0 = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-   initialZoom0 = gardenZoomLevel;
-  }
- }, { passive: true });
-
- sceneEl.addEventListener('touchmove', (e) => {
-  if(e.touches.length === 2 && touchDist0){
-   const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-   gardenZoomLevel = Math.max(0.72, Math.min(2.1, initialZoom0 * (dist / touchDist0)));
-   updateGardenZoomUI();
-  }
- }, { passive: true });
-
- sceneEl.addEventListener('touchend', (e) => {
-  if(e.touches.length < 2) touchDist0 = null;
- }, { passive: true });
-
  window.zoomInGarden = function(){
   gardenZoomLevel = Math.min(2.1, gardenZoomLevel + 0.25);
   updateGardenZoomUI();
  };
  window.zoomOutGarden = function(){
-  gardenZoomLevel = Math.max(0.72, gardenZoomLevel - 0.20);
-  if(gardenZoomLevel <= 1.05){ targetPanX = 0; targetPanY = 0; }
+  gardenZoomLevel = Math.max(1.0, gardenZoomLevel - 0.20);
+  if(gardenZoomLevel <= 1.02){
+   gardenZoomLevel = 1.0;
+   targetPanX = 0;
+   targetPanY = 0;
+  }
   updateGardenZoomUI();
  };
  window.resetZoomGarden = function(){
@@ -1372,11 +1370,17 @@
  function updateGardenZoomUI(){
   const el = document.getElementById('gardenZoomLabel');
   if(el){
-   if(Math.abs(gardenZoomLevel - 1.0) < 0.04){
+   if(gardenZoomLevel <= 1.02){
     el.textContent = 'Fit';
    } else {
     el.textContent = Math.round(gardenZoomLevel * 100) + '%';
    }
+  }
+  const minusBtn = sceneEl.querySelector('.garden-zoom-bar button:last-child');
+  if(minusBtn){
+   const atFit = gardenZoomLevel <= 1.02;
+   minusBtn.style.opacity = atFit ? '0.35' : '1.0';
+   minusBtn.style.pointerEvents = atFit ? 'none' : 'auto';
   }
  }
 
@@ -3426,6 +3430,21 @@
   const t = ts * 0.001;
   const theme = resolveTheme();
   const pal = PALETTES[theme] || PALETTES.sunlit;
+
+  // Numerical sanity & finite bounds guards
+  if(!Number.isFinite(activeHillPos)) activeHillPos = 0;
+  if(!Number.isFinite(activeHillVel)) activeHillVel = 0;
+  if(!Number.isFinite(gardenZoomLevel)) gardenZoomLevel = 1.0;
+  if(!Number.isFinite(gardenCurrentZoom)) gardenCurrentZoom = 1.0;
+  gardenZoomLevel = Math.max(1.0, Math.min(2.1, gardenZoomLevel));
+  if(gardenZoomLevel <= 1.02){
+   targetPanX = 0;
+   targetPanY = 0;
+  }
+  if(!Number.isFinite(gardenPanX)) gardenPanX = 0;
+  if(!Number.isFinite(gardenPanY)) gardenPanY = 0;
+  if(!Number.isFinite(targetPanX)) targetPanX = 0;
+  if(!Number.isFinite(targetPanY)) targetPanY = 0;
 
   // Card-stack spring & momentum physics
   const maxIdx = Math.max(0, hillCards.length - 1);
