@@ -946,6 +946,7 @@ function renderLibrary(){
        </div>
        <div class="library-topic-actions">
         <button type="button" class="lib-btn review-btn" onclick="event.stopPropagation();openTopic(${t.id})">Revisit</button>
+        <button type="button" class="lib-btn edit-topic-btn" onclick="event.stopPropagation();promptEditTopicName(${t.id})">✏️ Rename</button>
         ${(t.evergreenRevs||0)>=2 && !t.graduated ? `
          <button type="button" class="lib-btn graduate-btn-pill" onclick="event.stopPropagation();graduateTopic(${t.id})">🎓 Graduate topic</button>
         ` : ''}
@@ -1334,6 +1335,8 @@ function pushModalHistory(type){
 
 function hasAnyModalOpen(){
  return !!(
+  document.getElementById('subjectEditModal')?.classList.contains('open') ||
+  document.getElementById('topicEditModal')?.classList.contains('open') ||
   document.getElementById('remindersModal')?.classList.contains('open') ||
   document.getElementById('replantModal')?.classList.contains('open') ||
   document.getElementById('topicDeleteModal')?.classList.contains('open') ||
@@ -1346,6 +1349,8 @@ function hasAnyModalOpen(){
 }
 
 function closeAllModals(){
+ if(typeof closeSubjectEditModal === 'function') closeSubjectEditModal();
+ if(typeof closeTopicEditModal === 'function') closeTopicEditModal();
  if(typeof closeRemindersModal === 'function') closeRemindersModal();
  if(typeof closeReplantModal === 'function') closeReplantModal();
  if(typeof closeTopicDeleteModal === 'function') closeTopicDeleteModal();
@@ -1698,3 +1703,162 @@ document.addEventListener('visibilitychange', () => {
  if(!document.hidden) checkScheduledReminders();
 });
 setTimeout(checkScheduledReminders, 2500);
+
+
+/* Edit Subject (Name & Theme/Biome) and Edit Topic Name */
+let editingSubjectOriginalName = null;
+let selectedEditBiomeId = 'auto';
+
+function renderEditBiomePicker(){
+ const grid = document.getElementById('editBiomePickerGrid');
+ if(!grid) return;
+ const items = [
+  { id: 'auto', icon: '✨', label: 'Auto-match', dot: '#829477' },
+  ...BIOME_ARCHETYPES.map(a => ({ id: a.id, icon: a.icon, label: a.label, dot: a.dot }))
+ ];
+ grid.innerHTML = items.map(item => `
+  <button type="button"
+   class="biome-opt ${selectedEditBiomeId === item.id ? 'selected' : ''}"
+   onclick="selectEditSubjectBiome('${item.id}')">
+   <span class="biome-opt-swatch" style="background:${item.dot}"></span>
+   <span>${item.icon} ${escapeHtml(item.label)}</span>
+  </button>
+ `).join('');
+}
+
+function selectEditSubjectBiome(id){
+ selectedEditBiomeId = id;
+ renderEditBiomePicker();
+}
+
+function promptEditSubject(subject){
+ if(!subject) return;
+ editingSubjectOriginalName = subject;
+ const m = currentMission();
+ const input = document.getElementById('editSubjectNameInput');
+ if(input) input.value = subject;
+ 
+ selectedEditBiomeId = (m.subjectBiomes && m.subjectBiomes[subject]) ? m.subjectBiomes[subject] : 'auto';
+ renderEditBiomePicker();
+
+ const modal = document.getElementById('subjectEditModal');
+ const backdrop = document.getElementById('subjectEditBackdrop');
+ if(modal) modal.classList.add('open');
+ if(backdrop) backdrop.classList.add('open');
+ pushModalHistory('modal');
+}
+
+function closeSubjectEditModal(){
+ editingSubjectOriginalName = null;
+ document.getElementById('subjectEditModal')?.classList.remove('open');
+ document.getElementById('subjectEditBackdrop')?.classList.remove('open');
+}
+
+function submitEditSubject(e){
+ if(e) e.preventDefault();
+ if(!editingSubjectOriginalName) return;
+ const oldName = editingSubjectOriginalName;
+ const input = document.getElementById('editSubjectNameInput');
+ const newName = input ? input.value.trim() : '';
+ if(!newName){
+  toast('Please enter a subject name');
+  return;
+ }
+ 
+ const m = currentMission();
+ if(!Array.isArray(m.subjects)) m.subjects = [];
+ 
+ if(newName.toLowerCase() !== oldName.toLowerCase()){
+  const exists = m.subjects.some(s => s.toLowerCase() === newName.toLowerCase());
+  if(exists){
+   toast(`Subject "${newName}" already exists`);
+   return;
+  }
+  const idx = m.subjects.findIndex(s => s.toLowerCase() === oldName.toLowerCase());
+  if(idx !== -1) m.subjects[idx] = newName;
+  else m.subjects.push(newName);
+
+  topics.forEach(t => {
+   if((t.subject || '').trim().toLowerCase() === oldName.toLowerCase()){
+    t.subject = newName;
+   }
+  });
+
+  m.subjectBiomes = m.subjectBiomes || {};
+  if(m.subjectBiomes[oldName]){
+   delete m.subjectBiomes[oldName];
+  }
+  if(lastSelectedSubject === oldName) lastSelectedSubject = newName;
+ }
+
+ m.subjectBiomes = m.subjectBiomes || {};
+ if(selectedEditBiomeId !== 'auto'){
+  m.subjectBiomes[newName] = selectedEditBiomeId;
+ } else {
+  delete m.subjectBiomes[newName];
+ }
+
+ localStorage.setItem('morrowMissions', JSON.stringify(missions));
+ closeSubjectEditModal();
+ save();
+ render();
+ syncMissionUI();
+ if(window.onGardenOpen) window.onGardenOpen();
+ toast(`Subject "${newName}" updated ✿`);
+}
+
+let editingTopicId = null;
+
+function promptEditTopicName(id){
+ const t = topics.find(x => x.id === id);
+ if(!t) return;
+ editingTopicId = id;
+ const nameInput = document.getElementById('editTopicNameInput');
+ if(nameInput) nameInput.value = t.name;
+
+ const sel = document.getElementById('editTopicSubjectSelect');
+ if(sel){
+  const m = currentMission();
+  const subjectSet = new Set([...(m.subjects || []), ...topics.map(x => x.subject).filter(Boolean)]);
+  if(!subjectSet.size) subjectSet.add('General');
+  sel.innerHTML = Array.from(subjectSet).map(s => `<option value="${escapeHtml(s)}" ${s === t.subject ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('');
+ }
+
+ const modal = document.getElementById('topicEditModal');
+ const backdrop = document.getElementById('topicEditBackdrop');
+ if(modal) modal.classList.add('open');
+ if(backdrop) backdrop.classList.add('open');
+ pushModalHistory('modal');
+}
+
+function closeTopicEditModal(){
+ editingTopicId = null;
+ document.getElementById('topicEditModal')?.classList.remove('open');
+ document.getElementById('topicEditBackdrop')?.classList.remove('open');
+}
+
+function submitEditTopic(e){
+ if(e) e.preventDefault();
+ if(!editingTopicId) return;
+ const t = topics.find(x => x.id === editingTopicId);
+ if(!t) return;
+ const nameInput = document.getElementById('editTopicNameInput');
+ const newName = nameInput ? nameInput.value.trim() : '';
+ if(!newName){
+  toast('Please enter a topic title');
+  return;
+ }
+ const sel = document.getElementById('editTopicSubjectSelect');
+ const newSubject = sel ? sel.value : t.subject;
+
+ t.name = newName;
+ t.subject = newSubject || 'General';
+
+ closeTopicEditModal();
+ save();
+ render();
+ if(currentId === t.id && document.getElementById('review').classList.contains('active')){
+  openTopic(t.id, false);
+ }
+ toast(`Updated topic "${newName}" ✿`);
+}

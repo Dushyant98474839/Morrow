@@ -1060,7 +1060,9 @@ input:focus,select:focus{border-color:var(--sage)}
 /* Topic Delete Confirmation Modal */
 .topic-delete-backdrop,
 .subject-delete-backdrop,
-.reminders-modal-backdrop{
+.reminders-modal-backdrop,
+.subject-edit-backdrop,
+.topic-edit-backdrop{
   position:fixed;
   inset:0;
   z-index:52;
@@ -1073,13 +1075,17 @@ input:focus,select:focus{border-color:var(--sage)}
 }
 .topic-delete-backdrop.open,
 .subject-delete-backdrop.open,
-.reminders-modal-backdrop.open{
+.reminders-modal-backdrop.open,
+.subject-edit-backdrop.open,
+.topic-edit-backdrop.open{
   opacity:1;
   pointer-events:auto;
 }
 .topic-delete-modal,
 .subject-delete-modal,
-.reminders-modal{
+.reminders-modal,
+.subject-edit-modal,
+.topic-edit-modal{
   position:fixed;
   left:50%;
   top:50%;
@@ -1097,7 +1103,9 @@ input:focus,select:focus{border-color:var(--sage)}
 }
 .topic-delete-modal.open,
 .subject-delete-modal.open,
-.reminders-modal.open{
+.reminders-modal.open,
+.subject-edit-modal.open,
+.topic-edit-modal.open{
   opacity:1;
   pointer-events:auto;
   transform:translate(-50%,-50%) scale(1);
@@ -1331,4 +1339,35 @@ input:focus,select:focus{border-color:var(--sage)}
 .progress-reminder-card:hover{
   background:rgba(255,254,249,.96);
   border-color:rgba(133,145,112,.35);
+}
+
+
+/* Subject & Topic Edit Button Styling */
+.lib-edit-subject-icon-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:26px;
+  height:26px;
+  border-radius:8px;
+  color:#6e7563;
+  background:transparent;
+  border:none;
+  cursor:pointer;
+  opacity:.75;
+  transition:opacity .15s ease,background .15s ease;
+  margin-left:6px;
+  margin-right:1px;
+}
+.lib-edit-subject-icon-btn:hover{
+  opacity:1;
+  background:rgba(110,117,99,.12);
+  color:var(--ink);
+}
+.lib-btn.edit-topic-btn{
+  background:rgba(110,117,99,.08);
+  color:var(--ink);
+}
+.lib-btn.edit-topic-btn:hover{
+  background:rgba(110,117,99,.16);
 }
