@@ -374,6 +374,7 @@
     tufts: [],
     benches: [],
     squirrel: null,
+    deer: null,
     crow: null,
     seedPlot: null,
     plants: []
@@ -515,10 +516,13 @@
     }
    }
 
-   // 5c. Squirrel on hillside
+   // 5c. Squirrel on hillside — strictly depends on healthy blooming flowers on this hill!
    const overdueInSubj = subjTopics.filter(t => !t.done && dueState(t) !== 'fresh').length;
    const isHillWithering = subjTopics.length > 0 && (overdueInSubj / subjTopics.length >= 0.45);
-   if(!isHillWithering && hill.trees.length > 0 && hash(hSeed + 673) > 0.28){
+   const subjHealthy = subjTopics.filter(t => !t.paused && dueState(t) === 'fresh' && (t.level || 0) >= 1).length;
+
+   const squirrelThreshold = 2 + (hSeed % 3); // requires 2..4 healthy blooming flowers on this hill
+   if(!isHillWithering && hill.trees.length > 0 && subjHealthy >= squirrelThreshold){
     const tr = hill.trees[0];
     const initLx = Math.max(36, Math.min(W - 36, tr.lx + (tr.lx < W * 0.5 ? 24 : -24)));
     hill.squirrel = {
@@ -535,7 +539,29 @@
     };
    }
 
-   // 5d. Withering Crow (perched when hill is struggling/withering)
+   // 5d. Graceful Deer — depends on healthy flowers on this specific hill (min 5..7 blooming flowers!)
+   const deerThreshold = 5 + (hSeed % 3);
+   if(!isHillWithering && subjHealthy >= deerThreshold){
+    const dLy = usableMeadowTop + 0.36 * (usableMeadowBottom - usableMeadowTop) + (hash(hSeed + 719) - 0.5) * 26;
+    const dPathX = hillPathLocalX(hill, dLy);
+    const dSide = (idx % 2 === 0 ? -1 : 1);
+    const dLx = Math.max(48, Math.min(W - 48, dPathX + dSide * (68 + hash(hSeed + 727) * 34)));
+    hill.deer = {
+     lx: dLx,
+     ly: dLy,
+     baseLy: dLy,
+     dir: dSide > 0 ? -1 : 1,
+     state: 'walk', // 'walk', 'graze', 'lookout', 'trot'
+     speed: 22,
+     timer: 3.5 + hash(hSeed + 733) * 2.5,
+     walkTime: hash(hSeed + 743) * 10,
+     neckAngle: 0.05,
+     tailWag: 0,
+     phase: hash(hSeed + 751) * Math.PI * 2
+    };
+   }
+
+   // 5e. Withering Crow (perched when hill is struggling/withering)
    if(isHillWithering && hill.trees.length > 0){
     const tr = hill.trees[1] || hill.trees[0];
     hill.crow = {
@@ -685,25 +711,7 @@
   }
   while(birds.length > desiredBirds) birds.pop();
 
-  // Deer — prestigious sight on thriving, non-withering gardens
-  const totalHealthyBlooms = hillCards.reduce((s, h) => s + h.bloomCount, 0);
-  const desiredDeer = (!isGardenWithering && totalHealthyBlooms >= 8) ? 1 : 0;
-  while(deer.length < desiredDeer){
-   const hi = Math.max(0, Math.min(hillCards.length - 1, Math.round(activeHillPos)));
-   const hill = hillCards[hi] || hillCards[0];
-   const startLy = hill ? 55 + Math.random() * 90 : 80;
-   const startLx = hill ? hillPathLocalX(hill, startLy) + (Math.random() - 0.5) * 70 : W * 0.5;
-   deer.push({
-    lx: Math.max(32, Math.min(W - 32, startLx)),
-    ly: startLy,
-    vx: (Math.random() - 0.5) * 8,
-    phase: Math.random() * Math.PI * 2,
-    graze: 0,
-    gazeTimer: 2 + Math.random() * 4,
-    hillIndex: hi
-   });
-  }
-  while(deer.length > desiredDeer) deer.pop();
+// Deer is now spawned per-hill based on that hill's flowers
 
   // Perched songbirds (only on healthy hills)
   const desiredPerch = (!isGardenWithering && totalBlooms >= 3) ? Math.min(3, Math.floor(totalBlooms / 3)) : 0;
@@ -1168,6 +1176,17 @@
    return;
   }
 
+  // 10. Hit-test Deer (trots away gracefully!)
+  if(frontHill.deer && Math.hypot(lx - frontHill.deer.lx, ly - frontHill.deer.ly) < 38){
+   frontHill.deer.state = 'trot';
+   frontHill.deer.speed = 65;
+   frontHill.deer.timer = 3.0;
+   frontHill.deer.dir = (lx < frontHill.deer.lx ? 1 : -1);
+   spawnPetals(sx, sy - 12, '#eed8ae', 6);
+   showWhisper('A majestic deer trots gracefully across the meadow! 🦌✨');
+   return;
+  }
+
   // 10. Hit-test Garden Bench
   if(frontHill.benches){
    for(const bn of frontHill.benches){
@@ -1443,12 +1462,13 @@
   if(hill.cozyNook) drawCozyNook(hill.cozyNook, pal, t);
   if(hill.seedPlot && !isBackgroundPeek) drawSeedBedPlot(hill.seedPlot, pal, t);
 
-  // 7. Depth-Sorted Trees, Lantern, Benches, Squirrels & Topic Plants
+  // 7. Depth-Sorted Trees, Lantern, Benches, Squirrels, Deer & Topic Plants
   const renderables = [
    ...hill.trees.map(tr => ({ kind: 'tree', y: tr.ly, obj: tr })),
    ...(hill.lantern ? [{ kind: 'lantern', y: hill.lantern.ly, obj: hill.lantern }] : []),
    ...(hill.benches || []).map(bn => ({ kind: 'bench', y: bn.ly, obj: bn })),
    ...(hill.squirrel ? [{ kind: 'squirrel', y: hill.squirrel.ly, obj: hill.squirrel }] : []),
+   ...(hill.deer ? [{ kind: 'deer', y: hill.deer.ly, obj: hill.deer }] : []),
    ...hill.plants.map(p => ({ kind: 'plant', y: p.ly, obj: p }))
   ];
   renderables.sort((a, b) => a.y - b.y);
@@ -1458,6 +1478,7 @@
    else if(item.kind === 'lantern') drawStoneLantern(item.obj, pal, t);
    else if(item.kind === 'bench') drawGardenBench(item.obj, pal, t);
    else if(item.kind === 'squirrel') drawSquirrel(item.obj, hill, pal, t, dt);
+   else if(item.kind === 'deer') drawDeer(item.obj, hill, pal, t, dt);
    else drawBotanicalPlant(item.obj, t, baseWind, dt);
   }
 
@@ -1477,12 +1498,7 @@
    }
   }
 
-  // Deer on this hill (front card only)
-  if(!isBackgroundPeek){
-   for(const d of deer){
-    if(d.hillIndex === hill.index) drawDeer(d, t, dt, pal);
-   }
-  }
+
 
   // Perched birds on this hill (front card only)
   if(!isBackgroundPeek){
@@ -2293,14 +2309,20 @@
 
  // ── Rabbit (Coming & Going, Sprinting & Grazing) ────────────────────────
  function updateActiveRabbits(dt, t){
-  const totalHealthyFlowers = topics.filter(t => !t.paused && (dueState(t) === 'fresh') && (t.level || 0) >= 1).length;
-  const overdueCount = topics.filter(t => !t.done && dueState(t) !== 'fresh').length;
-  const deadCount = topics.filter(t => !t.done && dueState(t) === 'dead').length;
-  const isWithering = (topics.length > 0 && overdueCount / topics.length >= 0.35) || deadCount >= 2;
-  const rabbitThreshold = 9 + Math.floor(hash(missionSeed() + 773) * 4); // min ~10 randomised (9..12)
+  const frontCardIdx = Math.max(0, Math.min(hillCards.length - 1, Math.round(activeHillPos)));
+  const currentHill = hillCards[frontCardIdx];
+  if(!currentHill) return;
 
-  const canHaveRabbits = totalHealthyFlowers >= rabbitThreshold && !isWithering;
-  const maxRabbits = canHaveRabbits ? (totalHealthyFlowers >= rabbitThreshold + 6 ? 3 : totalHealthyFlowers >= rabbitThreshold + 2 ? 2 : 1) : 0;
+  // Rabbit spawn depends on flowers of the corresponding hill!
+  const hillHealthyFlowers = currentHill.topics.filter(t => !t.paused && (dueState(t) === 'fresh') && (t.level || 0) >= 1).length;
+  const hillOverdue = currentHill.topics.filter(t => !t.done && dueState(t) !== 'fresh').length;
+  const isHillWithering = currentHill.totalCount > 0 && (hillOverdue / currentHill.totalCount >= 0.4);
+
+  // Min flowers on this specific hill (randomized around 8..11)
+  const hillRabbitThreshold = 8 + (currentHill.crestSeed % 4);
+
+  const canHaveRabbits = hillHealthyFlowers >= hillRabbitThreshold && !isHillWithering;
+  const maxRabbits = canHaveRabbits ? (hillHealthyFlowers >= hillRabbitThreshold + 5 ? 3 : hillHealthyFlowers >= hillRabbitThreshold + 2 ? 2 : 1) : 0;
 
   rabbitSpawnTimer -= dt;
   if(canHaveRabbits && activeRabbits.length < maxRabbits && rabbitSpawnTimer <= 0){
@@ -2821,89 +2843,250 @@
   ctx.restore();
  }
 
- // ── Deer ─────────────────────────────────────────────────────────────────
- function drawDeer(d, t, dt, pal){
-  d.gazeTimer -= dt;
-  if(d.gazeTimer <= 0){
-   d.graze = d.graze === 0 ? 1 : 0;
-   d.gazeTimer = d.graze ? 1.5 + Math.random() * 2 : 2.5 + Math.random() * 3;
-   if(!d.graze && Math.random() < 0.3) d.vx = (Math.random() - 0.5) * 20;
+ // ── Deer (Graceful Walking, Grazing & Lookout) ─────────────────────────
+ function drawDeer(d, hill, pal, t, dt){
+  d.timer -= dt;
+
+  // State machine & active movement
+  const isMoving = d.state === 'walk' || d.state === 'trot';
+  if(isMoving){
+   const moveSpeed = d.state === 'trot' ? 58 : 22;
+   d.lx += d.dir * moveSpeed * dt;
+   d.walkTime += dt;
+
+   // Turn around at meadow boundaries
+   if(d.lx < 44){ d.lx = 44; d.dir = 1; }
+   if(d.lx > W - 44){ d.lx = W - 44; d.dir = -1; }
+
+   if(d.timer <= 0){
+    // Finished walking: pause to graze or stand on lookout
+    d.state = Math.random() < 0.6 ? 'graze' : 'lookout';
+    d.timer = 2.5 + Math.random() * 3.5;
+    if(Math.random() < 0.35) d.dir *= -1;
+   }
+  } else {
+   // Standing: grazing or on lookout
+   if(d.timer <= 0){
+    // Resume walking across the meadow!
+    d.state = 'walk';
+    d.timer = 3.5 + Math.random() * 4.5;
+    if(d.lx < 60) d.dir = 1;
+    else if(d.lx > W - 60) d.dir = -1;
+    else if(Math.random() < 0.35) d.dir *= -1;
+   }
   }
-  if(!d.graze){
-   d.lx += d.vx * dt;
-   d.vx *= Math.pow(0.85, dt * 60);
-   if(d.lx < 36){ d.lx = 36; d.vx = Math.abs(d.vx); }
-   if(d.lx > W - 36){ d.lx = W - 36; d.vx = -Math.abs(d.vx); }
-  }
-  const dir = d.vx >= 0 ? 1 : -1;
-  const bodyBob = Math.sin(t * 3.5 + d.phase) * (d.graze ? 0 : 1.2);
-  const legSwing = d.graze ? 0 : Math.sin(t * 6 + d.phase) * 0.3;
-  const neckTilt = d.graze ? 0.65 : -0.1;
-  const col = pal.isNight ? '#7a6248' : '#c8945a';
-  const belly = pal.isNight ? '#5e4c3c' : '#e0b888';
-  const shadow = pal.isNight ? 'rgba(14,24,20,0.28)' : 'rgba(28,48,28,0.16)';
+
+  // Smooth neck angle interpolation (no abrupt snapping!)
+  const targetNeck = d.state === 'graze' ? 0.70 : (d.state === 'lookout' ? -0.24 : 0.04);
+  d.neckAngle = (d.neckAngle || 0) + (targetNeck - (d.neckAngle || 0)) * Math.min(1, dt * 4.2);
+
+  // Soft tail wagging
+  d.tailWag = Math.sin(t * (d.state === 'graze' ? 6.5 : 3.5) + d.phase) * (d.state === 'graze' ? 0.35 : 0.15);
+
+  // Cadence & 4-beat walk cycle
+  const walkRate = d.state === 'trot' ? 8.8 : 4.8;
+  const walkCycle = isMoving ? (d.walkTime * walkRate) : 0;
+  const bodyBob = isMoving ? Math.sin(walkCycle * 2) * (d.state === 'trot' ? 1.5 : 0.85) : (Math.sin(t * 2) * 0.3);
+
+  const col = pal.isNight ? '#6e4f35' : '#c4864c';
+  const colDark = pal.isNight ? '#523824' : '#9b6232';
+  const belly = pal.isNight ? '#ded3c3' : '#f8ede0';
+  const shadow = pal.isNight ? 'rgba(14,24,20,0.26)' : 'rgba(28,48,28,0.16)';
+  const hoofCol = pal.isNight ? '#2a221b' : '#3c2718';
+
   ctx.save();
   ctx.translate(d.lx, d.ly + bodyBob);
+  ctx.scale(d.dir, 1);
+
+  // 1. Ground Shadow
   ctx.fillStyle = shadow;
   ctx.beginPath();
-  ctx.ellipse(0, 10, 18, 5, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 18, 19, 5.2, 0, 0, Math.PI * 2);
   ctx.fill();
-  const legCol = pal.isNight ? '#5a4838' : '#a07248';
-  ctx.strokeStyle = legCol;
-  ctx.lineWidth = 2.4;
-  ctx.lineCap = 'round';
-  [[- 8, 0.3],[8, -0.3]].forEach(([ox, phase]) => {
-   const swing = legSwing + phase;
-   ctx.beginPath(); ctx.moveTo(dir*(6+ox*0.1),4); ctx.lineTo(dir*(6+ox*0.1)+Math.sin(swing)*7,16); ctx.stroke();
-   ctx.beginPath(); ctx.moveTo(dir*(-4+ox*0.1),4); ctx.lineTo(dir*(-4+ox*0.1)+Math.sin(-swing)*7,16); ctx.stroke();
-  });
+
+  // 2. Articulated Legs (Natural quadruped walking gait!)
+  const fFarSwing = isMoving ? Math.sin(walkCycle + Math.PI) : 0;
+  const bFarSwing = isMoving ? Math.sin(walkCycle + Math.PI * 1.5) : 0;
+  const fNearSwing = isMoving ? Math.sin(walkCycle) : 0;
+  const bNearSwing = isMoving ? Math.sin(walkCycle + Math.PI * 0.5) : 0;
+
+  function drawLeg(hipX, hipY, swing, isFar, isHind){
+   ctx.save();
+   ctx.strokeStyle = isFar ? colDark : col;
+   ctx.lineWidth = 2.4;
+   ctx.lineCap = 'round';
+   ctx.lineJoin = 'round';
+
+   const kneeAngle = swing * 0.38 + (isMoving ? Math.max(0, -swing) * 0.25 : 0);
+   const kneeY = hipY + 8;
+   const kneeX = hipX + (isHind ? -2 : 1) + Math.sin(swing * 0.35) * 5;
+   const hoofY = hipY + 17;
+   const hoofX = kneeX + Math.sin(kneeAngle) * 5;
+
+   ctx.beginPath();
+   ctx.moveTo(hipX, hipY);
+   ctx.lineTo(kneeX, kneeY);
+   ctx.lineTo(hoofX, hoofY);
+   ctx.stroke();
+
+   ctx.fillStyle = hoofCol;
+   ctx.beginPath();
+   ctx.ellipse(hoofX + 0.5, hoofY, 1.8, 1.4, 0.2, 0, Math.PI * 2);
+   ctx.fill();
+
+   ctx.restore();
+  }
+
+  // Draw Far (back) Legs first
+  drawLeg(-7, 4, bFarSwing, true, true);  // Left Hind
+  drawLeg(7, 4, fFarSwing, true, false);  // Left Front
+
+  // 3. Body (Flank, haunches, shoulders)
   ctx.fillStyle = col;
   ctx.beginPath();
-  ctx.ellipse(0, 0, 14, 7.5, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 0, 15, 8.2, -0.05, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Cream Underbelly
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.ellipse(1, 2.5, 10.5, 4.8, -0.05, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Subtle dapples on flank
+  if(!pal.isNight){
+   ctx.fillStyle = 'rgba(255, 252, 240, 0.42)';
+   const spots = [[-5, -3], [-1, -4], [3, -3], [-3, -1], [2, -1], [6, -2]];
+   spots.forEach(([sx, sy]) => {
+    ctx.beginPath();
+    ctx.arc(sx, sy, 1.1, 0, Math.PI * 2);
+    ctx.fill();
+   });
+  }
+
+  // White rump patch
+  ctx.fillStyle = belly;
+  ctx.beginPath();
+  ctx.ellipse(-13.5, -1, 3.8, 5.2, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Tail (wags softly)
+  ctx.save();
+  ctx.translate(-14, -3);
+  ctx.rotate(d.tailWag - 0.2);
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.ellipse(-2.5, 0, 4.0, 2.2, 0.3, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = belly;
   ctx.beginPath();
-  ctx.ellipse(0, 2, 10, 4.5, 0, 0, Math.PI * 2);
+  ctx.ellipse(-2.5, 0.6, 3.2, 1.6, 0.3, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = pal.isNight ? '#c8c0b0' : '#f8f4e8';
-  ctx.beginPath();
-  ctx.arc(-dir * 13, -1, 3.2, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.restore();
+
+  // 4. Draw Near (front) Legs
+  drawLeg(-5, 4, bNearSwing, false, true); // Right Hind
+  drawLeg(9, 4, fNearSwing, false, false); // Right Front
+
+  // 5. Neck & Head
   ctx.save();
-  ctx.translate(dir * 10, -4);
-  ctx.rotate(neckTilt * dir);
+  ctx.translate(10, -3);
+  ctx.rotate(d.neckAngle);
+
+  // Neck
   ctx.fillStyle = col;
   ctx.beginPath();
-  ctx.ellipse(0, 0, 3.5, 7, 0, 0, Math.PI * 2);
+  ctx.moveTo(-3, 4);
+  ctx.quadraticCurveTo(-1, -7, 1, -12);
+  ctx.lineTo(6, -11);
+  ctx.quadraticCurveTo(4, -4, 2, 4);
+  ctx.closePath();
   ctx.fill();
-  ctx.translate(0, -7);
+
+  // Throat cream patch
+  ctx.fillStyle = belly;
   ctx.beginPath();
-  ctx.ellipse(0, 0, 4.5, 3.5, 0, 0, Math.PI * 2);
+  ctx.moveTo(0, 3);
+  ctx.quadraticCurveTo(1.5, -4, 3.5, -9);
+  ctx.lineTo(5.5, -9);
+  ctx.quadraticCurveTo(3, -2, 1.5, 3);
+  ctx.closePath();
   ctx.fill();
+
+  // Head
+  ctx.translate(2.5, -12);
+  ctx.fillStyle = col;
   ctx.beginPath();
-  ctx.ellipse(dir*3, 1, 2.8, 2, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 0, 4.8, 3.8, -0.2, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = pal.isNight ? '#c0a888' : '#2c1e14';
+
+  // Tapered Snout
   ctx.beginPath();
-  ctx.arc(dir*2, -1, 1.2, 0, Math.PI * 2);
+  ctx.ellipse(3.8, 1.2, 3.0, 2.2, 0.1, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = pal.isNight ? '#5a4830' : '#8c6038';
-  ctx.lineWidth = 1.4; ctx.lineCap = 'round';
+
+  // Dark Velvet Muzzle / Nose
+  ctx.fillStyle = '#221812';
   ctx.beginPath();
-  ctx.moveTo(0,-3); ctx.lineTo(dir*1,-11);
-  ctx.moveTo(dir*1,-8); ctx.lineTo(dir*4,-12);
-  ctx.moveTo(dir*1,-11); ctx.lineTo(-dir*1,-14);
+  ctx.ellipse(6.2, 1.2, 1.3, 1.1, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Eye (large, dark, glistening)
+  ctx.fillStyle = pal.isNight ? '#c09880' : '#1a120c';
+  ctx.beginPath();
+  ctx.arc(2.0, -1.2, 1.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.beginPath();
+  ctx.arc(2.3, -1.5, 0.45, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Ears
+  const earTwitch = Math.sin(t * 5 + d.phase) * 0.08;
+  ctx.fillStyle = col;
+  ctx.save();
+  ctx.translate(-2.5, -2.5);
+  ctx.rotate(-0.4 + earTwitch);
+  ctx.beginPath();
+  ctx.ellipse(0, -3.8, 1.8, 4.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = pal.isNight ? '#725048' : '#e6aba0';
+  ctx.beginPath();
+  ctx.ellipse(0, -3.5, 0.8, 2.8, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Antlers (Majestic branching antlers swaying with head)
+  ctx.save();
+  ctx.translate(0, -3.2);
+  ctx.strokeStyle = pal.isNight ? '#5a4634' : '#886244';
+  ctx.lineWidth = 1.4;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // Main beam
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.quadraticCurveTo(-1, -7, 2, -13);
+  ctx.quadraticCurveTo(4, -16, 7, -18);
   ctx.stroke();
-  ctx.fillStyle = col;
+
+  // Brow tine
   ctx.beginPath();
-  ctx.ellipse(-dir*2.5,-1,1.6,3.5,dir*0.4,0,Math.PI*2);
-  ctx.fill();
-  ctx.fillStyle = pal.isNight ? '#8a5058' : '#f0b8b0';
+  ctx.moveTo(0.5, -5);
+  ctx.lineTo(4.5, -8);
+  ctx.stroke();
+
+  // Crown tine
   ctx.beginPath();
-  ctx.ellipse(-dir*2.5,-1,0.8,2.4,dir*0.4,0,Math.PI*2);
-  ctx.fill();
+  ctx.moveTo(2.5, -12);
+  ctx.lineTo(0.5, -17);
+  ctx.stroke();
+
   ctx.restore();
-  ctx.restore();
+
+  ctx.restore(); // end head
+  ctx.restore(); // end deer
  }
 
  // ── Perched Bird ─────────────────────────────────────────────────────────
