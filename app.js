@@ -1559,27 +1559,37 @@ async function sendSystemNotification(title, body, tag){
  if(!('Notification' in window)) return false;
  if(Notification.permission !== 'granted') return false;
  
+ const notifOptions = {
+  body,
+  tag: tag || 'morrow-notification',
+  icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🌱</text></svg>',
+  badge: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🌱</text></svg>',
+  data: {
+   url: window.location.href,
+   timestamp: Date.now()
+  }
+ };
+
  try {
   if('serviceWorker' in navigator){
    const reg = await navigator.serviceWorker.ready;
    if(reg && reg.showNotification){
-    await reg.showNotification(title, {
-     body,
-     tag: tag || 'morrow-notification',
-     icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🌱</text></svg>',
-     badge: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🌱</text></svg>'
-    });
+    await reg.showNotification(title, notifOptions);
     return true;
    }
   }
  } catch(e){}
 
  try {
-  new Notification(title, {
-   body,
-   tag: tag || 'morrow-notification',
-   icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🌱</text></svg>'
-  });
+  const notif = new Notification(title, notifOptions);
+  notif.onclick = function(event){
+   try {
+    event.preventDefault();
+    window.focus();
+    if(typeof showView === 'function') showView('today');
+   } catch(err){}
+   notif.close();
+  };
   return true;
  } catch(e){
   return false;
@@ -1666,9 +1676,20 @@ function checkScheduledReminders(){
  }
 }
 
-// Register service worker if available
+// Register service worker and handle notification clicks
 if('serviceWorker' in navigator){
- navigator.serviceWorker.register('sw.js').catch(()=>{});
+ navigator.serviceWorker.register('sw.js').then((reg)=>{
+  try { reg.update(); } catch(e){}
+ }).catch(()=>{});
+
+ navigator.serviceWorker.addEventListener('message', (event) => {
+  if(event.data && event.data.type === 'NOTIFICATION_OPEN_APP'){
+   try {
+    window.focus();
+    if(typeof showView === 'function') showView('today');
+   } catch(e){}
+  }
+ });
 }
 
 // Background reminder timer & visibility hook
