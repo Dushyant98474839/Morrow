@@ -25,7 +25,7 @@
  let butterflies = [];
  let birds = [];
  let activeRabbits = [];
- let rabbitSpawnTimer = 3;
+ let rabbitSpawnTimer = 45; // 10x rarer: peaceful start, no instant spawn flood
  let deer = [];
  let perchBirds = [];
  let dryLeaves = [];
@@ -518,11 +518,14 @@
 
    // 5c. Squirrel on hillside — strictly depends on healthy blooming flowers on this hill!
    const overdueInSubj = subjTopics.filter(t => !t.done && dueState(t) !== 'fresh').length;
-   const isHillWithering = subjTopics.length > 0 && (overdueInSubj / subjTopics.length >= 0.45);
+   const isHillWithering = subjTopics.length > 0 && (overdueInSubj / subjTopics.length >= 0.25);
    const subjHealthy = subjTopics.filter(t => !t.paused && dueState(t) === 'fresh' && (t.level || 0) >= 1).length;
+   const subjBuddingOrBlooms = subjTopics.filter(t => !t.paused && dueState(t) === 'fresh' && (t.level || 0) >= 3).length;
+   const subjEvergreenBlooms = subjTopics.filter(t => !t.paused && dueState(t) === 'fresh' && (t.level || 0) >= 4).length;
 
-   const squirrelThreshold = 2 + (hSeed % 3); // requires 2..4 healthy blooming flowers on this hill
-   if(!isHillWithering && hill.trees.length > 0 && subjHealthy >= squirrelThreshold){
+   // 10x more earned: requires 10..12 healthy topics AND at least 3 budding/blooming flowers on this hill
+   const squirrelThreshold = 10 + (hSeed % 3);
+   if(!isHillWithering && hill.trees.length > 0 && subjHealthy >= squirrelThreshold && subjBuddingOrBlooms >= 3){
     const tr = hill.trees[0];
     const initLx = Math.max(36, Math.min(W - 36, tr.lx + (tr.lx < W * 0.5 ? 24 : -24)));
     hill.squirrel = {
@@ -535,13 +538,19 @@
      boundsLeft: 0,
      boundTime: 0,
      boundPause: 0,
-     phase: hash(hSeed + 607) * Math.PI * 2
+     phase: hash(hSeed + 607) * Math.PI * 2,
+     eventState: 'hidden',
+     eventTimer: 20.0 + hash(hSeed + 601) * 40.0, // starts hidden in tree, visits as rare event
+     visitDuration: 0,
+     alpha: 0
     };
    }
 
-   // 5d. Graceful Deer — depends on healthy flowers on this specific hill (min 5..7 blooming flowers!)
-   const deerThreshold = 5 + (hSeed % 3);
-   if(!isHillWithering && subjHealthy >= deerThreshold){
+   // 5d. Graceful Deer — MOST EARNED & RARE FOREST GUARDIAN!
+   // 10x more earned: requires a deeply mastered hill with >= 24..28 healthy topics AND >= 7..9 fully mature evergreen blooms (Level 4+), with 0 withering/overdue!
+   const deerThreshold = 24 + (hSeed % 5);
+   const deerBloomThreshold = 7 + (hSeed % 3);
+   if(!isHillWithering && overdueInSubj === 0 && subjHealthy >= deerThreshold && subjEvergreenBlooms >= deerBloomThreshold){
     const dLy = usableMeadowTop + 0.36 * (usableMeadowBottom - usableMeadowTop) + (hash(hSeed + 719) - 0.5) * 26;
     const dPathX = hillPathLocalX(hill, dLy);
     const dSide = (idx % 2 === 0 ? -1 : 1);
@@ -557,7 +566,11 @@
      walkTime: hash(hSeed + 743) * 10,
      neckAngle: 0.05,
      tailWag: 0,
-     phase: hash(hSeed + 751) * Math.PI * 2
+     phase: hash(hSeed + 751) * Math.PI * 2,
+     eventState: 'hidden',
+     eventTimer: 45.0 + hash(hSeed + 733) * 85.0, // deep cooldown: visits as elusive majestic event
+     visitDuration: 0,
+     alpha: 0
     };
    }
 
@@ -1142,8 +1155,21 @@
    if(Math.hypot(lx - tr.lx, ly - (tr.ly - 24 * tr.scale)) < 34){
     tr.shake = 1;
     if(frontHill.squirrel){
-     frontHill.squirrel.scamperBoost = 2.5;
-     frontHill.squirrel.dir *= -1;
+     if(frontHill.squirrel.eventState === 'hidden' && Math.random() < 0.35){
+      // Shaking tree has a small chance to coax a hidden squirrel out!
+      frontHill.squirrel.eventState = 'visiting';
+      frontHill.squirrel.visitDuration = 14.0;
+      frontHill.squirrel.boundsLeft = 3;
+      frontHill.squirrel.boundTime = 0;
+      frontHill.squirrel.boundPause = 0;
+      frontHill.squirrel.lx = Math.max(36, Math.min(W - 36, tr.lx + (tr.lx < W * 0.5 ? 20 : -20)));
+      frontHill.squirrel.dir = tr.lx < W * 0.5 ? 1 : -1;
+      frontHill.squirrel.alpha = 0.6;
+      showWhisper('A curious squirrel peeks out from the shaken branches! 🐿️');
+     } else if(frontHill.squirrel.eventState !== 'hidden'){
+      frontHill.squirrel.scamperBoost = 2.5;
+      frontHill.squirrel.dir *= -1;
+     }
     }
     const leafCol = tr.kind === 'sakura' ? '#f5c2ca' : tr.kind === 'maple' ? '#d98a5f' : tr.kind === 'golden_oak' ? '#f0cf78' : '#9bb88c';
     spawnPetals(sx, sy - 16, leafCol, 8);
@@ -1165,7 +1191,7 @@
   }
 
   // 9. Hit-test Squirrel (natural hopping scamper away!)
-  if(frontHill.squirrel && Math.hypot(lx - frontHill.squirrel.lx, ly - frontHill.squirrel.ly) < 32){
+  if(frontHill.squirrel && frontHill.squirrel.eventState !== 'hidden' && Math.hypot(lx - frontHill.squirrel.lx, ly - frontHill.squirrel.ly) < 32){
    frontHill.squirrel.state = 'scamper';
    frontHill.squirrel.boundsLeft = 3;
    frontHill.squirrel.boundTime = 0;
@@ -1177,7 +1203,7 @@
   }
 
   // 10. Hit-test Deer (trots away gracefully!)
-  if(frontHill.deer && Math.hypot(lx - frontHill.deer.lx, ly - frontHill.deer.ly) < 38){
+  if(frontHill.deer && frontHill.deer.eventState !== 'hidden' && Math.hypot(lx - frontHill.deer.lx, ly - frontHill.deer.ly) < 38){
    frontHill.deer.state = 'trot';
    frontHill.deer.speed = 65;
    frontHill.deer.timer = 3.0;
@@ -2315,18 +2341,21 @@
 
   // Rabbit spawn depends on flowers of the corresponding hill!
   const hillHealthyFlowers = currentHill.topics.filter(t => !t.paused && (dueState(t) === 'fresh') && (t.level || 0) >= 1).length;
+  const hillBuddingOrBlooms = currentHill.topics.filter(t => !t.paused && (dueState(t) === 'fresh') && (t.level || 0) >= 3).length;
   const hillOverdue = currentHill.topics.filter(t => !t.done && dueState(t) !== 'fresh').length;
-  const isHillWithering = currentHill.totalCount > 0 && (hillOverdue / currentHill.totalCount >= 0.4);
+  const isHillWithering = currentHill.totalCount > 0 && (hillOverdue / currentHill.totalCount >= 0.25);
 
-  // Min flowers on this specific hill (randomized around 8..11)
-  const hillRabbitThreshold = 8 + (currentHill.crestSeed % 4);
+  // 10x more earned: requires 18..22 healthy topics AND at least 5 blooming flowers on this hill
+  const hillRabbitThreshold = 18 + (currentHill.crestSeed % 5);
 
-  const canHaveRabbits = hillHealthyFlowers >= hillRabbitThreshold && !isHillWithering;
-  const maxRabbits = canHaveRabbits ? (hillHealthyFlowers >= hillRabbitThreshold + 5 ? 3 : hillHealthyFlowers >= hillRabbitThreshold + 2 ? 2 : 1) : 0;
+  const canHaveRabbits = hillHealthyFlowers >= hillRabbitThreshold && hillBuddingOrBlooms >= 5 && !isHillWithering;
+  // Solitary rare visitor: strictly 1 rabbit (only in a super-meadow with >= 35 topics can a second rabbit visit)
+  const maxRabbits = canHaveRabbits ? (hillHealthyFlowers >= 35 && hillBuddingOrBlooms >= 12 ? 2 : 1) : 0;
 
   rabbitSpawnTimer -= dt;
   if(canHaveRabbits && activeRabbits.length < maxRabbits && rabbitSpawnTimer <= 0){
-   rabbitSpawnTimer = 4 + Math.random() * 7;
+   // 10x rarer: 65 to 140 seconds cooldown between rabbit visits (1 to 2.5 minutes)
+   rabbitSpawnTimer = 65 + Math.random() * 75;
    const enterFromLeft = Math.random() < 0.5;
    activeRabbits.push({
     lx: enterFromLeft ? -24 : W + 24,
@@ -2334,12 +2363,12 @@
     dir: enterFromLeft ? 1 : -1,
     state: 'enter', // 'enter', 'nibble', 'hop', 'sprint', 'leave'
     stateTimer: 3,
-    targetLx: W * (0.2 + Math.random() * 0.6),
+    targetLx: W * (0.25 + Math.random() * 0.5),
     speed: 36,
     hopPhase: 0,
     hopAmp: 0,
     lifetime: 0,
-    maxStay: 14 + Math.random() * 16,
+    maxStay: 14 + Math.random() * 12,
     color: ['#c4b496', '#ad9c81', '#d4c8b2', '#9a846c'][Math.floor(Math.random() * 4)],
     earPerk: 1
    });
@@ -2512,8 +2541,50 @@
 
  // ── Squirrel (Natural Discrete Bounding & Foraging) ────────────────────
  function drawSquirrel(sq, hill, pal, t, dt){
+  // Rare Event Lifecycle: Resting up in tree vs visiting in meadow
+  if(!sq.eventState) sq.eventState = 'hidden';
+  if(sq.alpha === undefined) sq.alpha = 0;
+
+  const tr = hill.trees[sq.treeIdx % hill.trees.length] || { lx: W * 0.5, ly: 120 };
+
+  if(sq.eventState === 'hidden'){
+   sq.eventTimer -= dt;
+   if(sq.eventTimer <= 0){
+    // Scurry down tree to forage on meadow!
+    sq.eventState = 'visiting';
+    sq.visitDuration = 14.0 + Math.random() * 12.0;
+    sq.boundsLeft = 3;
+    sq.boundTime = 0;
+    sq.boundPause = 0;
+    sq.lx = Math.max(36, Math.min(W - 36, tr.lx + (tr.lx < W * 0.5 ? 20 : -20)));
+    sq.dir = tr.lx < W * 0.5 ? 1 : -1;
+    sq.alpha = 0;
+   } else {
+    return; // Resting peacefully in the canopy
+   }
+  }
+
+  // Active visit handling
+  if(sq.eventState === 'visiting'){
+   sq.alpha = Math.min(1, sq.alpha + dt * 2.0);
+   sq.visitDuration -= dt;
+   if(sq.visitDuration <= 0 && sq.boundsLeft <= 0){
+    sq.eventState = 'departing';
+    sq.boundsLeft = 2;
+    sq.boundTime = 0;
+    sq.boundPause = 0;
+    sq.dir = (sq.lx < tr.lx ? 1 : -1);
+   }
+  } else if(sq.eventState === 'departing'){
+   sq.alpha = Math.max(0, sq.alpha - dt * 1.4);
+   if(sq.alpha <= 0 || Math.abs(sq.lx - tr.lx) < 14){
+    sq.eventState = 'hidden';
+    sq.eventTimer = 55.0 + Math.random() * 75.0; // 55..130s cooldown before next foraging visit
+    return;
+   }
+  }
+
   // Check tree shake reaction: startle into scampering bounds!
-  const tr = hill.trees[sq.treeIdx % hill.trees.length];
   if(tr && tr.shake > 0.35 && sq.boundsLeft <= 0){
    sq.state = 'scamper';
    sq.boundsLeft = 3;
@@ -2594,6 +2665,7 @@
   ctx.translate(sq.lx, sq.ly + hopY);
   ctx.scale(sq.dir, 1);
   if(tilt) ctx.rotate(tilt);
+  ctx.globalAlpha = (sq.alpha !== undefined ? sq.alpha : 1);
 
   // 1. Soft ground shadow
   const shadowScale = Math.max(0.65, 1 - Math.abs(hopY) * 0.07);
@@ -2845,6 +2917,45 @@
 
  // ── Deer (Graceful Walking, Grazing & Lookout) ─────────────────────────
  function drawDeer(d, hill, pal, t, dt){
+  // Rare Event Lifecycle: Elusive forest wanderer
+  if(!d.eventState) d.eventState = 'hidden';
+  if(d.alpha === undefined) d.alpha = 0;
+
+  if(d.eventState === 'hidden'){
+   d.eventTimer -= dt;
+   if(d.eventTimer <= 0){
+    // Emerge serenely from the forest edge
+    d.eventState = 'visiting';
+    d.visitDuration = 28.0 + Math.random() * 22.0; // visits for 28-50 seconds
+    d.dir = (d.lx < W * 0.5 ? 1 : -1);
+    d.lx = d.dir > 0 ? 36 : W - 36;
+    d.state = 'walk';
+    d.timer = 4.5 + Math.random() * 3.5;
+    d.alpha = 0;
+   } else {
+    return; // Quietly grazing unseen in the distant forest
+   }
+  }
+
+  // Active visit handling
+  if(d.eventState === 'visiting'){
+   d.alpha = Math.min(1, d.alpha + dt * 0.65); // soft 1.5s fade-in
+   d.visitDuration -= dt;
+   if(d.visitDuration <= 0){
+    d.eventState = 'departing';
+    d.state = 'walk';
+    d.dir = (d.lx < W * 0.5 ? -1 : 1); // heads toward meadow edge
+    d.timer = 8.0;
+   }
+  } else if(d.eventState === 'departing'){
+   d.alpha = Math.max(0, d.alpha - dt * 0.4); // soft fade-out as it retreats
+   if(d.alpha <= 0 || d.lx < 24 || d.lx > W - 24){
+    d.eventState = 'hidden';
+    d.eventTimer = 110.0 + Math.random() * 150.0; // 110..260s cooldown (2 to 4.5 minutes!)
+    return;
+   }
+  }
+
   d.timer -= dt;
 
   // State machine & active movement
@@ -2897,6 +3008,7 @@
   ctx.save();
   ctx.translate(d.lx, d.ly + bodyBob);
   ctx.scale(d.dir, 1);
+  ctx.globalAlpha = (d.alpha !== undefined ? d.alpha : 1);
 
   // 1. Ground Shadow
   ctx.fillStyle = shadow;
