@@ -1347,10 +1347,11 @@ function pushModalHistory(type){
 
 function hasAnyModalOpen(){
  return !!(
+  document.getElementById('settingsModal')?.classList.contains('open') ||
   document.getElementById('authModal')?.classList.contains('open') ||
+  document.getElementById('remindersModal')?.classList.contains('open') ||
   document.getElementById('subjectEditModal')?.classList.contains('open') ||
   document.getElementById('topicEditModal')?.classList.contains('open') ||
-  document.getElementById('remindersModal')?.classList.contains('open') ||
   document.getElementById('replantModal')?.classList.contains('open') ||
   document.getElementById('topicDeleteModal')?.classList.contains('open') ||
   document.getElementById('subjectDeleteModal')?.classList.contains('open') ||
@@ -1362,10 +1363,11 @@ function hasAnyModalOpen(){
 }
 
 function closeAllModals(){
+ if(typeof closeSettingsModal === 'function') closeSettingsModal();
  if(typeof closeAuthModal === 'function') closeAuthModal();
+ if(typeof closeRemindersModal === 'function') closeRemindersModal();
  if(typeof closeSubjectEditModal === 'function') closeSubjectEditModal();
  if(typeof closeTopicEditModal === 'function') closeTopicEditModal();
- if(typeof closeRemindersModal === 'function') closeRemindersModal();
  if(typeof closeReplantModal === 'function') closeReplantModal();
  if(typeof closeTopicDeleteModal === 'function') closeTopicDeleteModal();
  if(typeof closeSubjectDeleteModal === 'function') closeSubjectDeleteModal();
@@ -1542,7 +1544,7 @@ function updateReminderUI(){
  }
 }
 
-function openRemindersModal(){
+function populateRemindersModalFromStorage(){
  const s = getReminderSettings();
  const mCheck = document.getElementById('reminderMorningCheck');
  const mTime = document.getElementById('reminderMorningTime');
@@ -1556,17 +1558,14 @@ function openRemindersModal(){
 
  updateReminderInputsState();
  updateReminderPermBox();
+}
 
- const modal = document.getElementById('remindersModal');
- const backdrop = document.getElementById('remindersModalBackdrop');
- if(modal) modal.classList.add('open');
- if(backdrop) backdrop.classList.add('open');
- pushModalHistory('modal');
+function openRemindersModal(){
+ openSettingsModal('reminders');
 }
 
 function closeRemindersModal(){
- document.getElementById('remindersModal')?.classList.remove('open');
- document.getElementById('remindersModalBackdrop')?.classList.remove('open');
+ closeSettingsModal();
 }
 
 async function requestReminderPermission(){
@@ -1909,19 +1908,58 @@ window.reloadAllStateFromStorage = function(){
  if(window.onGardenOpen) window.onGardenOpen();
 };
 
-function openAuthModal(){
- const modal = document.getElementById('authModal');
- const backdrop = document.getElementById('authModalBackdrop');
+let activeSettingsTab = 'account';
+
+function openSettingsModal(tab = 'account'){
+ switchSettingsTab(tab);
+ const modal = document.getElementById('settingsModal') || document.getElementById('authModal');
+ const backdrop = document.getElementById('settingsModalBackdrop') || document.getElementById('authModalBackdrop');
  if(modal) modal.classList.add('open');
  if(backdrop) backdrop.classList.add('open');
  pushModalHistory('modal');
  clearAuthAlert();
 }
 
-function closeAuthModal(){
- document.getElementById('authModal')?.classList.remove('open');
- document.getElementById('authModalBackdrop')?.classList.remove('open');
+function closeSettingsModal(force = false){
+ if(!force && window.MorrowSync && !window.MorrowSync.user){
+   toast('Please sign in or create an account to enter Morrow ✿');
+   return;
+ }
+ (document.getElementById('settingsModal') || document.getElementById('authModal'))?.classList.remove('open');
+ (document.getElementById('settingsModalBackdrop') || document.getElementById('authModalBackdrop'))?.classList.remove('open');
  clearAuthAlert();
+}
+
+function switchSettingsTab(tab){
+ activeSettingsTab = tab;
+ const accBtn = document.getElementById('settingsTabAccountBtn');
+ const remBtn = document.getElementById('settingsTabRemindersBtn');
+ const accSec = document.getElementById('settingsSectionAccount');
+ const remSec = document.getElementById('settingsSectionReminders');
+
+ if(tab === 'reminders'){
+   remBtn?.classList.add('active');
+   accBtn?.classList.remove('active');
+   if(remSec) remSec.style.display = 'block';
+   if(accSec) accSec.style.display = 'none';
+   if(typeof populateRemindersModalFromStorage === 'function'){
+     populateRemindersModalFromStorage();
+   }
+ } else {
+   accBtn?.classList.add('active');
+   remBtn?.classList.remove('active');
+   if(accSec) accSec.style.display = 'block';
+   if(remSec) remSec.style.display = 'none';
+ }
+ clearAuthAlert();
+}
+
+function openAuthModal(){
+ openSettingsModal('account');
+}
+
+function closeAuthModal(){
+ closeSettingsModal();
 }
 
 function switchAuthTab(tab){
@@ -2059,16 +2097,10 @@ async function handleForgotPassword(){
 }
 
 async function handleSignOut(){
- if(confirm('Sign out of your cloud account? Your local topics and garden progress will remain intact.')){
+ if(confirm('Sign out of your account on this device?')){
    if(window.MorrowSync) await window.MorrowSync.signOut();
-   toast('Signed out · Local mode active');
-   closeAuthModal();
+   toast('Signed out ✿');
  }
-}
-
-function handleContinueAsGuest(){
- closeAuthModal();
- toast('Continuing in instant local mode ✿');
 }
 
 function triggerManualSync(){

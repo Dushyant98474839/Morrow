@@ -414,21 +414,18 @@
     const authLoggedInView = document.getElementById('authLoggedInView');
     const authLoggedOutView = document.getElementById('authLoggedOutView');
     const profileCardTitle = document.getElementById('profileCardTitle');
+    const modalCloseBtn = document.getElementById('settingsModalCloseBtn');
+    const modalTitle = document.getElementById('settingsModalTitle');
+    const modalEyebrow = document.getElementById('settingsModalEyebrow');
+    const tabsNav = document.querySelector('.settings-tabs-nav');
+    const largeAvatar = document.getElementById('authProfileAvatar');
 
     if (user) {
-      const displayName = user.displayName || user.email?.split('@')[0] || (user.isAnonymous ? 'Guest Wanderer' : 'Reviser');
-      const email = user.isAnonymous ? 'Guest / Anonymous session' : (user.email || '');
+      const displayName = user.displayName || user.email?.split('@')[0] || 'Reviser';
+      const email = user.email || '';
       const initial = (displayName.trim()[0] || '🌿').toUpperCase();
 
-      const largeAvatar = document.getElementById('authProfileAvatar');
-
-      if (avatarChar) {
-        if (user.photoURL) {
-          avatarChar.innerHTML = `<img src="${user.photoURL}" alt="${displayName}" class="account-avatar-img" />`;
-        } else {
-          avatarChar.textContent = initial;
-        }
-      }
+      if (avatarChar) avatarChar.textContent = initial;
       if (largeAvatar) {
         if (user.photoURL) {
           largeAvatar.innerHTML = `<img src="${user.photoURL}" alt="${displayName}" style="width:100%;height:100%;border-radius:50%;object-fit:cover" />`;
@@ -440,15 +437,35 @@
       if (profileEmail) profileEmail.textContent = email;
       if (profileCardTitle) profileCardTitle.textContent = displayName;
 
+      if (modalTitle) modalTitle.textContent = 'Settings';
+      if (modalEyebrow) modalEyebrow.textContent = 'Sanctuary preferences';
+      if (modalCloseBtn) modalCloseBtn.style.display = 'flex';
+      if (tabsNav) tabsNav.style.display = 'flex';
+
       if (authLoggedInView) authLoggedInView.style.display = 'block';
       if (authLoggedOutView) authLoggedOutView.style.display = 'none';
+
+      // Auto close the auth gate once successfully signed in
+      if (typeof closeSettingsModal === 'function') {
+        closeSettingsModal(true);
+      }
     } else {
       if (avatarChar) avatarChar.textContent = '👤';
-      const largeAvatar = document.getElementById('authProfileAvatar');
       if (largeAvatar) largeAvatar.textContent = '🌿';
-      if (profileCardTitle) profileCardTitle.textContent = 'Cloud Sync & Account';
+      if (profileCardTitle) profileCardTitle.textContent = 'Sign In / Register';
+
+      if (modalTitle) modalTitle.textContent = 'Welcome to Morrow';
+      if (modalEyebrow) modalEyebrow.textContent = 'Gentle revision sanctuary';
+      if (modalCloseBtn) modalCloseBtn.style.display = 'none'; // Cannot dismiss without account
+      if (tabsNav) tabsNav.style.display = 'none'; // Must log in before accessing other settings
+
       if (authLoggedInView) authLoggedInView.style.display = 'none';
       if (authLoggedOutView) authLoggedOutView.style.display = 'block';
+
+      // Enforce auth gate modal on first load or sign out
+      if (typeof openSettingsModal === 'function') {
+        openSettingsModal('account');
+      }
     }
   }
 
@@ -532,27 +549,33 @@
       }
     },
 
-    // Anonymous sign in
-    signInAnonymously: async () => {
-      if (!authInstance) throw new Error('Firebase Auth not available. Please check Firebase config.');
-      const cred = await authInstance.signInAnonymously();
-      return cred.user;
-    },
-
     // Reset password
     sendPasswordReset: async (email) => {
       if (!authInstance) throw new Error('Firebase Auth not available. Please check Firebase config.');
       await authInstance.sendPasswordResetEmail(email.trim());
     },
 
-    // Sign out
+    // Sign out & clear cache
     signOut: async () => {
       if (authInstance) {
         await authInstance.signOut();
       }
       currentUser = null;
+      try {
+        const mKeys = ['morrowMissions', 'morrowActiveMission', 'morrowTopics', 'morrowDone', 'morrowPendingGardenAdds', 'morrowPendingGardenBlooms', 'morrowPendingGardenBiomes'];
+        mKeys.forEach(k => localStorage.removeItem(k));
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('morrow_')) {
+            localStorage.removeItem(k);
+          }
+        }
+      } catch(e){}
+      if (typeof window.reloadAllStateFromStorage === 'function') {
+        window.reloadAllStateFromStorage();
+      }
       updateUserUI(null);
-      setSyncStatus(SyncState.LOCAL, 'Saved locally');
+      setSyncStatus(SyncState.LOCAL, 'Signed out');
     },
 
     // Export local data to downloadable JSON

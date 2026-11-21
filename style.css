@@ -1529,7 +1529,18 @@ input:focus,select:focus{border-color:var(--sage)}
   transform:scale(1.08) rotate(-4deg);
 }
 
-/* --- Morrow Account & Firebase Cloud Sync Styling --- */
+/* --- Morrow Settings, Account & Firebase Cloud Sync Styling --- */
+.settings-btn {
+  position: relative;
+  overflow: visible;
+}
+.settings-gear-icon {
+  color: var(--ink);
+  transition: transform .35s cubic-bezier(.2,.9,.3,1.2);
+}
+.settings-btn:hover .settings-gear-icon {
+  transform: rotate(45deg);
+}
 .account-btn {
   position: relative;
   overflow: visible;
@@ -1574,7 +1585,8 @@ input:focus,select:focus{border-color:var(--sage)}
   100% { transform: scale(1); opacity: 0.9; }
 }
 
-/* Auth Modal Backdrop & Window */
+/* Settings Modal & Backdrop */
+.settings-modal-backdrop,
 .auth-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1586,16 +1598,18 @@ input:focus,select:focus{border-color:var(--sage)}
   transition: opacity .25s ease;
   z-index: 120;
 }
+.settings-modal-backdrop.open,
 .auth-modal-backdrop.open {
   opacity: 1;
   pointer-events: auto;
 }
+.settings-modal,
 .auth-modal {
   position: fixed;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -46%) scale(0.96);
-  width: min(calc(100vw - 32px), 390px);
+  width: min(calc(100vw - 32px), 395px);
   max-height: calc(100vh - 48px);
   overflow-y: auto;
   background: #fffdf7;
@@ -1608,10 +1622,41 @@ input:focus,select:focus{border-color:var(--sage)}
   transition: all .25s cubic-bezier(.16, 1, .3, 1);
   z-index: 121;
 }
+.settings-modal.open,
 .auth-modal.open {
   opacity: 1;
   pointer-events: auto;
   transform: translate(-50%, -50%) scale(1);
+}
+
+/* Settings Segment Tabs */
+.settings-tabs-nav {
+  display: flex;
+  background: #f0ebe0;
+  border-radius: 14px;
+  padding: 4px;
+  margin: 12px 0 16px;
+  gap: 4px;
+}
+.settings-tab-btn {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 8px 10px;
+  font: 600 12px 'DM Sans', sans-serif;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all .18s ease;
+}
+.settings-tab-btn.active {
+  background: #ffffff;
+  color: var(--ink);
+  box-shadow: 0 2px 7px rgba(0,0,0,0.06);
 }
 
 /* Auth Modal Content Elements */
