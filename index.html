@@ -351,6 +351,9 @@
 </div>
 
 <div class="phone">
+  <div class="offline-banner" id="offlineBanner" style="display:none" role="alert">
+    ⚡ Offline · Disconnected from cloud. Changes disabled until reconnected.
+  </div>
   <div class="botanical botanical-top" aria-hidden="true">
     <svg viewBox="0 0 220 190" role="presentation">
       <path d="M8 180 C55 140 38 90 92 12 M48 143 C20 126 12 103 18 83 C42 91 55 112 48 143 M58 111 C85 112 105 97 111 75 C84 73 65 88 58 111 M79 72 C53 57 49 36 58 18 C81 34 89 52 79 72 M95 35 C119 41 139 31 149 10 C124 4 104 14 95 35" />
@@ -369,7 +372,16 @@
   <span class="petal petal-three" aria-hidden="true"></span>
   <div class="status"><span>morrow</span><span>● ● ▰</span></div>
   <header class="top">
-    <div><div class="eyebrow" id="dateLabel">A little space to return</div><h1 id="pageTitle">Good morning.</h1></div>
+    <div>
+      <div style="display:flex;align-items:center">
+        <div class="eyebrow" id="dateLabel">A little space to return</div>
+        <div class="cloud-status-pill" id="cloudStatusPill" style="display:none">
+          <span class="cloud-status-dot" id="cloudStatusDot"></span>
+          <span id="cloudStatusText">Saved</span>
+        </div>
+      </div>
+      <h1 id="pageTitle">Good morning.</h1>
+    </div>
     <div style="display:flex;align-items:center;gap:7px">
       <button class="icon-btn settings-btn" id="settingsBtn" title="Settings (Account & Notifications)" aria-label="Settings" onclick="openSettingsModal()">
         <svg class="settings-gear-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -546,7 +558,7 @@
           </span>
           <div>
             <div style="font:600 13px 'DM Sans',sans-serif;color:var(--ink)" id="profileCardTitle">Cloud Sync & Account</div>
-            <div style="font-size:11.5px;color:var(--muted)" id="profileCardSub">Saved locally · Connect to Firebase</div>
+            <div style="font-size:11.5px;color:var(--muted)" id="profileCardSub">Direct Firestore cloud sanctuary</div>
           </div>
         </div>
         <span style="font-size:18px;color:var(--muted)">›</span>
@@ -562,12 +574,18 @@
   </nav>
   <div class="toast" id="toast"></div>
 </div>
+<div class="cloud-loading-overlay" id="cloudLoadingOverlay" style="display:none">
+  <div class="cloud-loading-box">
+    <span class="cloud-loading-flower">✿</span>
+    <div class="cloud-loading-text" id="cloudLoadingText">Connecting to your sanctuary...</div>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="storage-db.js"></script>
-<script src="sync-engine.js"></script>
+<script src="firebase-cloud.js"></script>
 <script src="app.js"></script>
 <script src="garden.js"></script>
 <script>

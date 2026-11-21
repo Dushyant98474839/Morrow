@@ -196,41 +196,25 @@ const DEFAULT_MISSIONS=[
  }
 ];
 
-window.DEFAULT_MISSIONS = DEFAULT_MISSIONS;
-
-let missions=JSON.parse(localStorage.getItem('morrowMissions')||'null')||DEFAULT_MISSIONS;
-let activeMissionId=localStorage.getItem('morrowActiveMission')||'upsc';
-if(!missions.some(m=>m.id===activeMissionId)) activeMissionId=missions[0].id;
-
-window.missions = missions;
-window.activeMissionId = activeMissionId;
+let missions = [...DEFAULT_MISSIONS];
+let activeMissionId = 'upsc';
 
 function currentMission(){
  return missions.find(m=>m.id===activeMissionId)||missions[0];
 }
-function missionStorageKey(suffix, mId=activeMissionId){
- return mId==='upsc' ? (suffix==='topics'?'morrowTopics':suffix==='done'?'morrowDone':'morrowGardenWorld') : `morrow_${mId}_${suffix}`;
-}
 
 let topics=[];
-window.topics = topics;
 let completed=0;
 let currentId=null;
 const expandedSubjects = new Set();
 const expandedTopics = new Set();
 
-let pendingGardenAdds=JSON.parse(localStorage.getItem('morrowPendingGardenAdds')||'{}');
-let pendingGardenBlooms=JSON.parse(localStorage.getItem('morrowPendingGardenBlooms')||'{}');
-let pendingGardenBiomes=JSON.parse(localStorage.getItem('morrowPendingGardenBiomes')||'{}');
+let pendingGardenAdds={};
+let pendingGardenBlooms={};
+let pendingGardenBiomes={};
 
 function saveGardenQueues(){
- localStorage.setItem('morrowPendingGardenAdds',JSON.stringify(pendingGardenAdds));
- localStorage.setItem('morrowPendingGardenBlooms',JSON.stringify(pendingGardenBlooms));
- localStorage.setItem('morrowPendingGardenBiomes',JSON.stringify(pendingGardenBiomes));
  updateGardenNavBadge();
- if(window.MorrowSync && typeof window.MorrowSync.scheduleCloudSync === 'function'){
-  window.MorrowSync.scheduleCloudSync();
- }
 }
 
 function queueGardenAdd(topicId, mId=activeMissionId){
@@ -262,16 +246,29 @@ function updateGardenNavBadge(){
 
 function loadMissionState(mId){
  const m=missions.find(x=>x.id===mId)||missions[0];
- const rawTopics=JSON.parse(localStorage.getItem(missionStorageKey('topics',m.id))||'null');
- const base=rawTopics!==null ? rawTopics : JSON.parse(JSON.stringify(m.starter||[]));
- topics=base.map(t=>({...t,dueAt:t.dueAt||todayStart(),lastReviewed:t.lastReviewed||null,done:!!t.done,graduated:!!t.graduated,paused:!!t.paused,evergreenRevs:Number(t.evergreenRevs)||0,level:t.level||0}));
- window.topics = topics;
- window.activeMissionId = activeMissionId;
- completed=Number(localStorage.getItem(missionStorageKey('done',m.id))||0);
+ const cloud = window.FirebaseCloud && window.FirebaseCloud.workspace;
+ const rawTopics = (cloud && cloud.topicsByMission && cloud.topicsByMission[m.id]) 
+   ? cloud.topicsByMission[m.id] 
+   : (m.starter || []);
+ topics=rawTopics.map(t=>({...t,dueAt:t.dueAt||todayStart(),lastReviewed:t.lastReviewed||null,done:!!t.done,graduated:!!t.graduated,paused:!!t.paused,evergreenRevs:Number(t.evergreenRevs)||0,level:t.level||0}));
+ completed=Number((cloud && cloud.doneByMission && cloud.doneByMission[m.id]) || 0);
  currentId=null;
  expandedSubjects.clear();
  syncMissionUI();
  updateGardenNavBadge();
+}
+
+function checkOnlineForMutation(action = 'make changes'){
+ if (!navigator.onLine) {
+  toast(`Offline: Cannot ${action} ⚡`);
+  return false;
+ }
+ if (!window.FirebaseCloud || !window.FirebaseCloud.user) {
+  toast('Please sign in first ✿');
+  openSettingsModal('account');
+  return false;
+ }
+ return true;
 }
 
 let lastSelectedSubject='';
@@ -351,6 +348,7 @@ function closeSubjectModal(){
 
 function submitNewSubject(e){
  e.preventDefault();
+ if(!checkOnlineForMutation('add subject')) return;
  const input = document.getElementById('newSubjectNameInput');
  const raw = (input?.value || '').trim();
  if(!raw){
@@ -368,7 +366,9 @@ function submitNewSubject(e){
   if(selectedNewBiomeId !== 'auto'){
    m.subjectBiomes = m.subjectBiomes || {};
    m.subjectBiomes[existing] = selectedNewBiomeId;
-   localStorage.setItem('morrowMissions', JSON.stringify(missions));
+   if(window.FirebaseCloud && window.FirebaseCloud.updateSubject){
+    window.FirebaseCloud.updateSubject(m.id, existing, existing, selectedNewBiomeId).catch(console.error);
+   }
   }
   closeSubjectModal();
   syncMissionUI();
@@ -392,7 +392,9 @@ function submitNewSubject(e){
   m.subjectBiomes[raw] = selectedNewBiomeId;
  }
 
- localStorage.setItem('morrowMissions', JSON.stringify(missions));
+ if(window.FirebaseCloud && window.FirebaseCloud.updateSubject){
+  window.FirebaseCloud.updateSubject(m.id, raw, raw, selectedNewBiomeId).catch(console.error);
+ }
  queueGardenBiome(raw, m.id);
  closeSubjectModal();
 
@@ -628,9 +630,11 @@ let pendingDeleteMissionId=null;
 function getMissionStats(mId){
  const m=missions.find(x=>x.id===mId);
  if(!m) return {topicsCount:0,doneCount:0};
- const rawTopics=JSON.parse(localStorage.getItem(missionStorageKey('topics',m.id))||'null');
- const list=rawTopics!==null ? rawTopics : (m.starter||[]);
- const doneCount=Number(localStorage.getItem(missionStorageKey('done',m.id))||0);
+ const cloud = window.FirebaseCloud && window.FirebaseCloud.workspace;
+ const list = (cloud && cloud.topicsByMission && cloud.topicsByMission[m.id])
+   ? cloud.topicsByMission[m.id]
+   : (m.starter || []);
+ const doneCount = Number((cloud && cloud.doneByMission && cloud.doneByMission[m.id]) || 0);
  return {topicsCount:list.length,doneCount};
 }
 
@@ -670,42 +674,37 @@ function closeDeleteMissionModal(){
  document.getElementById('missionDeleteModal')?.classList.remove('open');
 }
 
-function executeDeleteMission(){
+async function executeDeleteMission(){
+ if(!checkOnlineForMutation('delete mission')) return;
  if(!pendingDeleteMissionId || missions.length<=1)return;
  const idx=missions.findIndex(x=>x.id===pendingDeleteMissionId);
  if(idx===-1)return;
  const deleted=missions[idx];
 
- localStorage.removeItem(missionStorageKey('topics',deleted.id));
- localStorage.removeItem(missionStorageKey('done',deleted.id));
- localStorage.removeItem(missionStorageKey('garden',deleted.id));
  delete pendingGardenAdds[deleted.id];
  delete pendingGardenBlooms[deleted.id];
  delete pendingGardenBiomes[deleted.id];
  saveGardenQueues();
 
  missions.splice(idx,1);
- localStorage.setItem('morrowMissions',JSON.stringify(missions));
- window.missions = missions;
-
- if(window.MorrowDB && window.MorrowDB.deleteMission){
-  window.MorrowDB.deleteMission(deleted.id, true);
-  if(window.MorrowDB.getAllTopics){
-   window.MorrowDB.getAllTopics(deleted.id).then(topList => {
-    topList.forEach(t => window.MorrowDB.deleteTopic(t.id, true));
-   }).catch(console.error);
-  }
- }
- if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
-  window.MorrowSync.scheduleSync();
- }
 
  const wasActive=(deleted.id===activeMissionId);
  closeDeleteMissionModal();
 
+ const nextActiveId = wasActive ? missions[0].id : activeMissionId;
  if(wasActive){
-  activeMissionId=missions[0].id;
-  localStorage.setItem('morrowActiveMission',activeMissionId);
+  activeMissionId = nextActiveId;
+ }
+
+ if(window.FirebaseCloud && window.FirebaseCloud.deleteMission){
+  try {
+   await window.FirebaseCloud.deleteMission(deleted.id, nextActiveId);
+  } catch(err) {
+   console.error('Delete mission failed:', err);
+  }
+ }
+
+ if(wasActive){
   loadMissionState(activeMissionId);
   render();
   if(document.getElementById('review').classList.contains('active')) showView('today');
@@ -839,10 +838,8 @@ function executeDeleteMission(){
 function switchMission(id){
  if(id===activeMissionId){closeMissionSwitcher();return}
  activeMissionId=id;
- window.activeMissionId=activeMissionId;
- localStorage.setItem('morrowActiveMission',activeMissionId);
- if(window.MorrowDB && window.MorrowDB.putSetting){
-  window.MorrowDB.putSetting('active_mission', activeMissionId, false);
+ if(window.FirebaseCloud && window.FirebaseCloud.switchMission){
+  window.FirebaseCloud.switchMission(activeMissionId).catch(console.error);
  }
  loadMissionState(activeMissionId);
  render();
@@ -852,8 +849,9 @@ function switchMission(id){
  toast(`${m.icon} ${m.name}`);
 }
 
-function createNewMission(e){
+async function createNewMission(e){
  e.preventDefault();
+ if(!checkOnlineForMutation('create mission')) return;
  const nameEl=document.getElementById('newMissionName');
  const iconEl=document.getElementById('newMissionIcon');
  const subjEl=document.getElementById('newMissionSubjects');
@@ -865,31 +863,24 @@ function createNewMission(e){
  const id='mission_'+Date.now();
  const newMission = {id,icon,name,subjects,starter:[]};
  missions.push(newMission);
- window.missions = missions;
- localStorage.setItem('morrowMissions',JSON.stringify(missions));
- if(window.MorrowDB && window.MorrowDB.putMission){
-  window.MorrowDB.putMission(newMission, true);
+ 
+ if(window.FirebaseCloud && window.FirebaseCloud.createMission){
+  try {
+   await window.FirebaseCloud.createMission(newMission);
+  } catch(err) {
+   console.error('Create mission failed:', err);
+  }
  }
- if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
-  window.MorrowSync.scheduleSync();
- }
+
  nameEl.value='';subjEl.value='';iconEl.value='🌱';
  toggleCreateMission(false);
  switchMission(id);
 }
 
 function save(){
- localStorage.setItem(missionStorageKey('topics'),JSON.stringify(topics));
- localStorage.setItem(missionStorageKey('done'),completed);
- window.topics = topics;
- window.missions = missions;
- window.activeMissionId = activeMissionId;
- if(window.MorrowDB && window.MorrowDB.putSetting){
-  window.MorrowDB.putSetting(`done_${activeMissionId}`, completed, true);
- }
- if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
-  window.MorrowSync.scheduleSync();
- }
+ // In-memory state only. Firestore is the single source of truth.
+ // Direct operations (FirebaseCloud.addTopic, updateTopic, rateTopic, etc.)
+ // persist directly to Firestore without localStorage.
 }
 function dueState(t){
  const days=Math.floor((todayStart()-new Date(t.dueAt).setHours(0,0,0,0))/DAY);
@@ -1023,6 +1014,7 @@ function renderLibrary(){
  }).join('');
 }
 function changeNextDate(id,value){
+ if(!checkOnlineForMutation('update revision date')) return;
  const t=topics.find(x=>x.id===id);if(!t||!value)return;
  const [y,m,d]=value.split('-').map(Number);
  const targetTs=new Date(y,m-1,d).getTime();
@@ -1033,13 +1025,14 @@ function changeNextDate(id,value){
  }
  t.dueAt=targetTs;
  t.done=false;
- save();render();
- if(window.MorrowDB && window.MorrowDB.putTopic){
-  window.MorrowDB.putTopic(t, true);
+ if(window.FirebaseCloud && window.FirebaseCloud.updateTopic){
+  window.FirebaseCloud.updateTopic(activeMissionId, id, topic => ({
+   ...topic,
+   dueAt: targetTs,
+   done: false
+  })).catch(console.error);
  }
- if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
-  window.MorrowSync.scheduleSync();
- }
+ render();
  toast('Next revision date updated ✿');
 }
 function renderGarden(){
@@ -1157,6 +1150,7 @@ function openTopic(id,push=true){currentId=id;let t=topics.find(x=>x.id===id);if
 }
 function startReview(){let t=topics.find(x=>!t.done && !t.graduated && !t.paused && x.dueAt<=Date.now());if(t)openTopic(t.id);else toast('Nothing waiting today ✿')}
 function rateTopic(kind){
+ if(!checkOnlineForMutation('record revision')) return;
  let t=topics.find(x=>x.id===currentId);if(!t)return;
  if(t.graduated){
   toast('Topic is already mastered · re-plant to resume revisions ✿');
@@ -1184,13 +1178,19 @@ function rateTopic(kind){
  t.dueAt=todayStart()+interval*DAY;
  t.tone=kind==='forgot'?'clay':kind==='difficult'?'gold':'';
  queueGardenBloom(t.id);
- save();render();showView('today');
- if(window.MorrowDB && window.MorrowDB.putTopic){
-  window.MorrowDB.putTopic(t, true);
+
+ if(window.FirebaseCloud && window.FirebaseCloud.rateTopic){
+  window.FirebaseCloud.rateTopic(activeMissionId, t.id, {
+   level: t.level,
+   lastReviewed: t.lastReviewed,
+   done: false,
+   dueAt: t.dueAt,
+   tone: t.tone,
+   evergreenRevs: t.evergreenRevs || 0
+  }).catch(console.error);
  }
- if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
-  window.MorrowSync.scheduleSync();
- }
+
+ render();showView('today');
  const stageNames=['Seed','Sprout','Sapling','Budding','Evergreen'];
  const stageName=stageNames[Math.min(lvl,4)];
 
@@ -1203,17 +1203,20 @@ function rateTopic(kind){
  }
 }
 function graduateTopic(id){
+ if(!checkOnlineForMutation('graduate topic')) return;
  const t=topics.find(x=>x.id===id);if(!t)return;
  t.graduated=true;
  t.done=true;
  t.paused=false;
- save();render();
- if(window.MorrowDB && window.MorrowDB.putTopic){
-  window.MorrowDB.putTopic(t, true);
+ if(window.FirebaseCloud && window.FirebaseCloud.updateTopic){
+  window.FirebaseCloud.updateTopic(activeMissionId, id, topic => ({
+   ...topic,
+   graduated: true,
+   done: true,
+   paused: false
+  })).catch(console.error);
  }
- if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
-  window.MorrowSync.scheduleSync();
- }
+ render();
  if(document.getElementById('review').classList.contains('active')) showView('today');
  toast(`🎓 "${t.name}" graduated to Full Bloom! Permanent mastery ✿`);
 }
@@ -1244,6 +1247,7 @@ function closeReplantModal(){
 }
 
 function confirmReplantTopic(){
+ if(!checkOnlineForMutation('re-plant topic')) return;
  if(!pendingReplantTopicId) return;
  const id = pendingReplantTopicId;
  const t = topics.find(x => x.id === id);
@@ -1264,14 +1268,20 @@ function confirmReplantTopic(){
  t.level = info.lvl;
  t.dueAt = todayStart() + info.days * DAY;
  closeReplantModal();
- save();
+
+ if(window.FirebaseCloud && window.FirebaseCloud.updateTopic){
+  window.FirebaseCloud.updateTopic(activeMissionId, id, topic => ({
+   ...topic,
+   graduated: false,
+   done: false,
+   paused: false,
+   evergreenRevs: 0,
+   level: info.lvl,
+   dueAt: t.dueAt
+  })).catch(console.error);
+ }
+
  render();
- if(window.MorrowDB && window.MorrowDB.putTopic){
-  window.MorrowDB.putTopic(t, true);
- }
- if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
-  window.MorrowSync.scheduleSync();
- }
  if(currentId === t.id && document.getElementById('review').classList.contains('active')){
   openTopic(t.id);
  }
@@ -1282,18 +1292,20 @@ function replantTopic(id){
  openReplantModal(id);
 }
 function togglePauseTopic(id){
+ if(!checkOnlineForMutation('pause/resume topic')) return;
  const t=topics.find(x=>x.id===id);if(!t)return;
  t.paused=!t.paused;
  if(!t.paused && t.dueAt<todayStart()){
   t.dueAt=todayStart();
  }
- save();render();
- if(window.MorrowDB && window.MorrowDB.putTopic){
-  window.MorrowDB.putTopic(t, true);
+ if(window.FirebaseCloud && window.FirebaseCloud.updateTopic){
+  window.FirebaseCloud.updateTopic(activeMissionId, id, topic => ({
+   ...topic,
+   paused: t.paused,
+   dueAt: t.dueAt
+  })).catch(console.error);
  }
- if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
-  window.MorrowSync.scheduleSync();
- }
+ render();
  toast(t.paused?` "${t.name}" put on hold · resting peacefully`:`"${t.name}" resumed · back in active garden ✿`);
 }
 let pendingDeleteSubjectName = null;
@@ -1322,32 +1334,28 @@ function closeSubjectDeleteModal(){
 }
 
 function confirmDeleteSubject(){
+ if(!checkOnlineForMutation('delete subject')) return;
  if(!pendingDeleteSubjectName) return;
  const subj = pendingDeleteSubjectName;
  const m = currentMission();
  
  if(Array.isArray(m.subjects)){
   m.subjects = m.subjects.filter(s => (s || '').trim().toLowerCase() !== subj.trim().toLowerCase());
-  localStorage.setItem('morrowMissions', JSON.stringify(missions));
  }
  if(m.subjectBiomes && m.subjectBiomes[subj]){
   delete m.subjectBiomes[subj];
-  localStorage.setItem('morrowMissions', JSON.stringify(missions));
  }
- const toDelete = topics.filter(t => (t.subject || '').trim() === subj.trim());
- toDelete.forEach(t => {
-  if(window.MorrowDB && window.MorrowDB.deleteTopic) window.MorrowDB.deleteTopic(t.id, true);
- });
- topics = topics.filter(t => (t.subject || '').trim() !== subj.trim());
- window.topics = topics;
+ topics = topics.filter(t => (t.subject || '').trim().toLowerCase() !== subj.trim().toLowerCase());
  expandedSubjects.clear();
  
- if(window.MorrowDB && window.MorrowDB.putMission){
-  window.MorrowDB.putMission(m, true);
- }
  closeSubjectDeleteModal();
- save();
+
+ if(window.FirebaseCloud && window.FirebaseCloud.deleteSubject){
+  window.FirebaseCloud.deleteSubject(m.id, subj).catch(console.error);
+ }
+
  render();
+ syncMissionUI();
  toast(`Deleted subject "${subj}" ✿`);
 }
 
@@ -1375,24 +1383,23 @@ function closeTopicDeleteModal(){
 }
 
 function confirmDeleteTopic(){
+ if(!checkOnlineForMutation('delete topic')) return;
  if(!pendingDeleteTopicId) return;
  const id = pendingDeleteTopicId;
  const t = topics.find(x => x.id === id);
  if(!t) return;
  topics = topics.filter(x => x.id !== id);
- window.topics = topics;
  closeTopicDeleteModal();
- save();
+
+ if(window.FirebaseCloud && window.FirebaseCloud.deleteTopic){
+  window.FirebaseCloud.deleteTopic(activeMissionId, id).catch(console.error);
+ }
+
  render();
- if(window.MorrowDB && window.MorrowDB.deleteTopic){
-  window.MorrowDB.deleteTopic(id, true);
- }
- if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
-  window.MorrowSync.scheduleSync();
- }
  toast(`Deleted "${t.name}"`);
 }
 function addTopic(){
+ if(!checkOnlineForMutation('add topic')) return;
  let name=document.getElementById('topicInput').value.trim(),subject=document.getElementById('subjectInput').value;
  if(!name){document.getElementById('topicInput').focus();toast('Add a topic name first');return}
  if(!subject || subject==='__new_subject__') subject='General';
@@ -1400,40 +1407,39 @@ function addTopic(){
  if(!Array.isArray(m.subjects)) m.subjects=[];
  if(!m.subjects.includes(subject)){
   m.subjects.push(subject);
-  localStorage.setItem('morrowMissions',JSON.stringify(missions));
-  if(window.MorrowDB && window.MorrowDB.putMission){
-   window.MorrowDB.putMission(m, true);
-  }
  }
  const stage=document.getElementById('levelInput')?.value||'seed';
  const stageMap={seed:{days:1,lvl:0,icon:'🌱',label:'Seed'},sprout:{days:3,lvl:1,icon:'🌿',label:'Sprout'},sapling:{days:7,lvl:2,icon:'🌳',label:'Sapling'},budding:{days:15,lvl:3,icon:'🌸',label:'Budding'},evergreen:{days:30,lvl:4,icon:'🏔',label:'Evergreen'}};
  const info=stageMap[stage]||stageMap.seed;
  const newId=Date.now();
- const newTopic = {id:newId,name,subject,tone:'',done:false,graduated:false,paused:false,evergreenRevs:0,dueAt:todayStart()+info.days*DAY,level:info.lvl,missionId:m.id};
+ const newTopic = {
+  id:newId,
+  name,
+  subject,
+  tone:'',
+  done:false,
+  graduated:false,
+  paused:false,
+  evergreenRevs:0,
+  dueAt:todayStart()+info.days*DAY,
+  level:info.lvl
+ };
  topics.unshift(newTopic);
- window.topics = topics;
  queueGardenAdd(newId);
- save();
+
+ if(window.FirebaseCloud && window.FirebaseCloud.addTopic){
+  window.FirebaseCloud.addTopic(activeMissionId, newTopic).catch(console.error);
+ }
+
  render();
- if(window.MorrowDB && window.MorrowDB.putTopic){
-  window.MorrowDB.putTopic(newTopic, true);
- }
- if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
-  window.MorrowSync.scheduleSync();
- }
- document.getElementById('topicInput').value='';document.getElementById('levelInput').value='seed';showView('today');toast(`${info.icon} ${info.label} planted · revisit in ${info.days} day${info.days===1?'':'s'}`);
+ document.getElementById('topicInput').value='';
+ document.getElementById('levelInput').value='seed';
+ showView('today');
+ toast(`${info.icon} ${info.label} planted · revisit in ${info.days} day${info.days===1?'':'s'}`);
 }
 function toast(msg){let el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2200)}
 loadMissionState(activeMissionId);
 render();
-
-if (window.MorrowDB && typeof window.MorrowDB.migrateFromLocalStorageIfNeeded === 'function') {
- window.MorrowDB.migrateFromLocalStorageIfNeeded().then(() => {
-  if (typeof window.reloadAllStateFromStorage === 'function') {
-   window.reloadAllStateFromStorage();
-  }
- }).catch(console.error);
-}
 const now = new Date();
 document.getElementById('dateLabel').textContent =
   now.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});
@@ -1531,7 +1537,7 @@ try {
 
 
 /* Daily Notification Reminders (Morning & Night) */
-const REMINDERS_KEY = 'morrowReminderSettings';
+let inMemoryReminders = null;
 
 function getReminderSettings(){
  const fallback = {
@@ -1543,25 +1549,21 @@ function getReminderSettings(){
   lastMorningDate: null,
   lastNightDate: null
  };
- try {
-  const raw = localStorage.getItem(REMINDERS_KEY);
-  if(!raw) return fallback;
-  return { ...fallback, ...JSON.parse(raw) };
- } catch(e){
-  return fallback;
+ const cloud = window.FirebaseCloud && window.FirebaseCloud.workspace;
+ if(cloud && cloud.reminders){
+  return { ...fallback, ...cloud.reminders };
  }
+ if(inMemoryReminders){
+  return { ...fallback, ...inMemoryReminders };
+ }
+ return fallback;
 }
 
 function saveReminderSettings(settings){
- try {
-  localStorage.setItem(REMINDERS_KEY, JSON.stringify(settings));
-  if(window.MorrowDB && window.MorrowDB.putSetting){
-   window.MorrowDB.putSetting('reminders', settings, true);
-  }
-  if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
-   window.MorrowSync.scheduleSync();
-  }
- } catch(e){}
+ inMemoryReminders = settings;
+ if(window.FirebaseCloud && window.FirebaseCloud.saveReminders){
+  window.FirebaseCloud.saveReminders(settings).catch(console.error);
+ }
 }
 
 function updateReminderInputsState(){
@@ -1892,6 +1894,7 @@ function closeSubjectEditModal(){
 
 function submitEditSubject(e){
  if(e) e.preventDefault();
+ if(!checkOnlineForMutation('edit subject')) return;
  if(!editingSubjectOriginalName) return;
  const oldName = editingSubjectOriginalName;
  const input = document.getElementById('editSubjectNameInput');
@@ -1934,19 +1937,11 @@ function submitEditSubject(e){
   delete m.subjectBiomes[newName];
  }
 
- localStorage.setItem('morrowMissions', JSON.stringify(missions));
- if(window.MorrowDB && window.MorrowDB.putMission){
-  window.MorrowDB.putMission(m, true);
+ if(window.FirebaseCloud && window.FirebaseCloud.updateSubject){
+  window.FirebaseCloud.updateSubject(m.id, oldName, newName, selectedEditBiomeId).catch(console.error);
  }
- if(window.MorrowDB && window.MorrowDB.putTopic){
-  topics.forEach(t => {
-   if((t.subject || '').trim().toLowerCase() === newName.toLowerCase()){
-    window.MorrowDB.putTopic(t, true);
-   }
-  });
- }
+
  closeSubjectEditModal();
- save();
  render();
  syncMissionUI();
  if(window.onGardenOpen) window.onGardenOpen();
@@ -1985,6 +1980,7 @@ function closeTopicEditModal(){
 
 function submitEditTopic(e){
  if(e) e.preventDefault();
+ if(!checkOnlineForMutation('edit topic')) return;
  if(!editingTopicId) return;
  const t = topics.find(x => x.id === editingTopicId);
  if(!t) return;
@@ -2000,15 +1996,16 @@ function submitEditTopic(e){
  t.name = newName;
  t.subject = newSubject || 'General';
 
+ if(window.FirebaseCloud && window.FirebaseCloud.updateTopic){
+  window.FirebaseCloud.updateTopic(activeMissionId, t.id, topic => ({
+   ...topic,
+   name: newName,
+   subject: newSubject || 'General'
+  })).catch(console.error);
+ }
+
  closeTopicEditModal();
- save();
  render();
- if(window.MorrowDB && window.MorrowDB.putTopic){
-  window.MorrowDB.putTopic(t, true);
- }
- if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
-  window.MorrowSync.scheduleSync();
- }
  if(currentId === t.id && document.getElementById('review').classList.contains('active')){
   openTopic(t.id, false);
  }
@@ -2021,47 +2018,36 @@ function submitEditTopic(e){
 
 let activeAuthTab = 'signin';
 
-window.reloadAllStateFromStorage = async function(){
- if (window.MorrowDB) {
-  try {
-   const dbMissions = await window.MorrowDB.getAllMissions();
-   if (dbMissions && dbMissions.length > 0) {
-    missions = dbMissions;
-    localStorage.setItem('morrowMissions', JSON.stringify(missions));
-   }
-   const dbActive = await window.MorrowDB.getSetting('active_mission');
-   if (dbActive && dbActive.value) {
-    activeMissionId = dbActive.value;
-    localStorage.setItem('morrowActiveMission', activeMissionId);
-   }
-   if (!missions.some(m => m.id === activeMissionId)) activeMissionId = (missions[0] && missions[0].id) || 'upsc';
-   const dbTopics = await window.MorrowDB.getAllTopics(activeMissionId);
-   if (dbTopics && dbTopics.length > 0) {
-    topics = dbTopics.map(t=>({...t,dueAt:t.dueAt||todayStart(),lastReviewed:t.lastReviewed||null,done:!!t.done,graduated:!!t.graduated,paused:!!t.paused,evergreenRevs:Number(t.evergreenRevs)||0,level:t.level||0}));
-    localStorage.setItem(missionStorageKey('topics', activeMissionId), JSON.stringify(topics));
-    window.topics = topics;
-   }
-   const dbDone = await window.MorrowDB.getSetting(`done_${activeMissionId}`);
-   if (dbDone && dbDone.value !== undefined) {
-    completed = Number(dbDone.value) || 0;
-    localStorage.setItem(missionStorageKey('done', activeMissionId), completed);
-   }
-  } catch(e) {
-   console.warn('MorrowDB reload fallback:', e);
-  }
+window.onFirestoreDataUpdated = function(workspace){
+ if(!workspace) return;
+ if(Array.isArray(workspace.missions) && workspace.missions.length > 0){
+  missions = workspace.missions;
  }
-
- if (!missions || !missions.length) {
-  missions = JSON.parse(localStorage.getItem('morrowMissions') || 'null') || DEFAULT_MISSIONS;
+ if(workspace.activeMissionId && missions.some(m => m.id === workspace.activeMissionId)){
+  activeMissionId = workspace.activeMissionId;
+ } else if(missions.length > 0 && !missions.some(m => m.id === activeMissionId)){
+  activeMissionId = missions[0].id;
  }
- activeMissionId = localStorage.getItem('morrowActiveMission') || 'upsc';
- if(!missions.some(m => m.id === activeMissionId)) activeMissionId = missions[0].id;
- window.missions = missions;
- window.activeMissionId = activeMissionId;
  loadMissionState(activeMissionId);
  render();
  syncMissionUI();
  if(window.onGardenOpen) window.onGardenOpen();
+};
+
+window.onFirestoreSignOut = function(){
+ missions = [...DEFAULT_MISSIONS];
+ activeMissionId = 'upsc';
+ topics = [];
+ completed = 0;
+ currentId = null;
+ render();
+ syncMissionUI();
+};
+
+window.reloadAllStateFromStorage = function(){
+ if(window.FirebaseCloud && window.FirebaseCloud.workspace){
+  window.onFirestoreDataUpdated(window.FirebaseCloud.workspace);
+ }
 };
 
 let activeSettingsTab = 'account';
@@ -2181,8 +2167,8 @@ async function handleGoogleSignIn(){
    console.error(err);
    let msg = err.message || 'Google sign-in failed';
    if(err.code === 'auth/popup-closed-by-user') msg = 'Sign-in window closed';
-   if(err.code === 'auth/configuration-not-found' || !window.MorrowSync.isConfigured()) {
-     msg = 'Please enter your Firebase config below in "Configure Firebase Project" first.';
+   else if(err.code === 'auth/unauthorized-domain') {
+     msg = 'This domain is not authorized for OAuth in Firebase Console. Please add localhost / 127.0.0.1 to authorized domains in Firebase Console -> Authentication -> Settings.';
    }
    setAuthAlert(msg);
  }
@@ -2226,8 +2212,6 @@ async function handleEmailAuthSubmit(e){
      msg = 'An account with this email already exists.';
    } else if(err.code === 'auth/weak-password') {
      msg = 'Password should be at least 6 characters.';
-   } else if(!window.MorrowSync.isConfigured()) {
-     msg = 'Please configure your Firebase credentials below to enable cloud accounts.';
    }
    setAuthAlert(msg);
  } finally {

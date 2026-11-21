@@ -1921,3 +1921,77 @@ input:focus,select:focus{border-color:var(--sage)}
   outline: none;
 }
 
+/* Offline Connection Banner */
+.offline-banner {
+  background: #b45c43;
+  color: #ffffff;
+  padding: 8px 14px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: center;
+  position: relative;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(180, 92, 67, 0.25);
+  animation: slideDownBanner .25s ease-out;
+}
+@keyframes slideDownBanner {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Saving & Cloud Status Pill */
+.cloud-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #edf1e8;
+  border: 1px solid #d4dece;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-left: 6px;
+  transition: all .2s ease;
+}
+.cloud-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #7da372;
+}
+
+/* Loading Overlay while fetching from Firestore */
+.cloud-loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(245, 241, 232, 0.94);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cloud-loading-box {
+  text-align: center;
+}
+.cloud-loading-flower {
+  font-size: 34px;
+  color: var(--sage);
+  display: inline-block;
+  animation: flower-spin 2.5s ease-in-out infinite;
+}
+@keyframes flower-spin {
+  0% { transform: scale(0.9) rotate(0deg); opacity: 0.7; }
+  50% { transform: scale(1.15) rotate(180deg); opacity: 1; }
+  100% { transform: scale(0.9) rotate(360deg); opacity: 0.7; }
+}
+.cloud-loading-text {
+  margin-top: 12px;
+  font: 500 15px 'Fraunces', serif;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+
