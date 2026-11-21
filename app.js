@@ -196,9 +196,14 @@ const DEFAULT_MISSIONS=[
  }
 ];
 
+window.DEFAULT_MISSIONS = DEFAULT_MISSIONS;
+
 let missions=JSON.parse(localStorage.getItem('morrowMissions')||'null')||DEFAULT_MISSIONS;
 let activeMissionId=localStorage.getItem('morrowActiveMission')||'upsc';
 if(!missions.some(m=>m.id===activeMissionId)) activeMissionId=missions[0].id;
+
+window.missions = missions;
+window.activeMissionId = activeMissionId;
 
 function currentMission(){
  return missions.find(m=>m.id===activeMissionId)||missions[0];
@@ -208,6 +213,7 @@ function missionStorageKey(suffix, mId=activeMissionId){
 }
 
 let topics=[];
+window.topics = topics;
 let completed=0;
 let currentId=null;
 const expandedSubjects = new Set();
@@ -259,6 +265,8 @@ function loadMissionState(mId){
  const rawTopics=JSON.parse(localStorage.getItem(missionStorageKey('topics',m.id))||'null');
  const base=rawTopics!==null ? rawTopics : JSON.parse(JSON.stringify(m.starter||[]));
  topics=base.map(t=>({...t,dueAt:t.dueAt||todayStart(),lastReviewed:t.lastReviewed||null,done:!!t.done,graduated:!!t.graduated,paused:!!t.paused,evergreenRevs:Number(t.evergreenRevs)||0,level:t.level||0}));
+ window.topics = topics;
+ window.activeMissionId = activeMissionId;
  completed=Number(localStorage.getItem(missionStorageKey('done',m.id))||0);
  currentId=null;
  expandedSubjects.clear();
@@ -678,6 +686,19 @@ function executeDeleteMission(){
 
  missions.splice(idx,1);
  localStorage.setItem('morrowMissions',JSON.stringify(missions));
+ window.missions = missions;
+
+ if(window.MorrowDB && window.MorrowDB.deleteMission){
+  window.MorrowDB.deleteMission(deleted.id, true);
+  if(window.MorrowDB.getAllTopics){
+   window.MorrowDB.getAllTopics(deleted.id).then(topList => {
+    topList.forEach(t => window.MorrowDB.deleteTopic(t.id, true));
+   }).catch(console.error);
+  }
+ }
+ if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
+  window.MorrowSync.scheduleSync();
+ }
 
  const wasActive=(deleted.id===activeMissionId);
  closeDeleteMissionModal();
@@ -818,7 +839,11 @@ function executeDeleteMission(){
 function switchMission(id){
  if(id===activeMissionId){closeMissionSwitcher();return}
  activeMissionId=id;
+ window.activeMissionId=activeMissionId;
  localStorage.setItem('morrowActiveMission',activeMissionId);
+ if(window.MorrowDB && window.MorrowDB.putSetting){
+  window.MorrowDB.putSetting('active_mission', activeMissionId, false);
+ }
  loadMissionState(activeMissionId);
  render();
  closeMissionSwitcher();
@@ -838,8 +863,16 @@ function createNewMission(e){
  const parsedSubjects=subjEl.value.split(',').map(s=>s.trim()).filter(Boolean);
  const subjects=parsedSubjects.length ? [...new Set([...parsedSubjects,'Other'])] : ['General','Notes','Practice','Other'];
  const id='mission_'+Date.now();
- missions.push({id,icon,name,subjects,starter:[]});
+ const newMission = {id,icon,name,subjects,starter:[]};
+ missions.push(newMission);
+ window.missions = missions;
  localStorage.setItem('morrowMissions',JSON.stringify(missions));
+ if(window.MorrowDB && window.MorrowDB.putMission){
+  window.MorrowDB.putMission(newMission, true);
+ }
+ if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
+  window.MorrowSync.scheduleSync();
+ }
  nameEl.value='';subjEl.value='';iconEl.value='🌱';
  toggleCreateMission(false);
  switchMission(id);
@@ -848,8 +881,14 @@ function createNewMission(e){
 function save(){
  localStorage.setItem(missionStorageKey('topics'),JSON.stringify(topics));
  localStorage.setItem(missionStorageKey('done'),completed);
- if(window.MorrowSync && typeof window.MorrowSync.scheduleCloudSync === 'function'){
-  window.MorrowSync.scheduleCloudSync();
+ window.topics = topics;
+ window.missions = missions;
+ window.activeMissionId = activeMissionId;
+ if(window.MorrowDB && window.MorrowDB.putSetting){
+  window.MorrowDB.putSetting(`done_${activeMissionId}`, completed, true);
+ }
+ if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
+  window.MorrowSync.scheduleSync();
  }
 }
 function dueState(t){
@@ -995,6 +1034,12 @@ function changeNextDate(id,value){
  t.dueAt=targetTs;
  t.done=false;
  save();render();
+ if(window.MorrowDB && window.MorrowDB.putTopic){
+  window.MorrowDB.putTopic(t, true);
+ }
+ if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
+  window.MorrowSync.scheduleSync();
+ }
  toast('Next revision date updated ✿');
 }
 function renderGarden(){
@@ -1140,6 +1185,12 @@ function rateTopic(kind){
  t.tone=kind==='forgot'?'clay':kind==='difficult'?'gold':'';
  queueGardenBloom(t.id);
  save();render();showView('today');
+ if(window.MorrowDB && window.MorrowDB.putTopic){
+  window.MorrowDB.putTopic(t, true);
+ }
+ if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
+  window.MorrowSync.scheduleSync();
+ }
  const stageNames=['Seed','Sprout','Sapling','Budding','Evergreen'];
  const stageName=stageNames[Math.min(lvl,4)];
 
@@ -1157,6 +1208,12 @@ function graduateTopic(id){
  t.done=true;
  t.paused=false;
  save();render();
+ if(window.MorrowDB && window.MorrowDB.putTopic){
+  window.MorrowDB.putTopic(t, true);
+ }
+ if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
+  window.MorrowSync.scheduleSync();
+ }
  if(document.getElementById('review').classList.contains('active')) showView('today');
  toast(`🎓 "${t.name}" graduated to Full Bloom! Permanent mastery ✿`);
 }
@@ -1209,6 +1266,12 @@ function confirmReplantTopic(){
  closeReplantModal();
  save();
  render();
+ if(window.MorrowDB && window.MorrowDB.putTopic){
+  window.MorrowDB.putTopic(t, true);
+ }
+ if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
+  window.MorrowSync.scheduleSync();
+ }
  if(currentId === t.id && document.getElementById('review').classList.contains('active')){
   openTopic(t.id);
  }
@@ -1225,6 +1288,12 @@ function togglePauseTopic(id){
   t.dueAt=todayStart();
  }
  save();render();
+ if(window.MorrowDB && window.MorrowDB.putTopic){
+  window.MorrowDB.putTopic(t, true);
+ }
+ if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
+  window.MorrowSync.scheduleSync();
+ }
  toast(t.paused?` "${t.name}" put on hold · resting peacefully`:`"${t.name}" resumed · back in active garden ✿`);
 }
 let pendingDeleteSubjectName = null;
@@ -1265,9 +1334,17 @@ function confirmDeleteSubject(){
   delete m.subjectBiomes[subj];
   localStorage.setItem('morrowMissions', JSON.stringify(missions));
  }
+ const toDelete = topics.filter(t => (t.subject || '').trim() === subj.trim());
+ toDelete.forEach(t => {
+  if(window.MorrowDB && window.MorrowDB.deleteTopic) window.MorrowDB.deleteTopic(t.id, true);
+ });
  topics = topics.filter(t => (t.subject || '').trim() !== subj.trim());
+ window.topics = topics;
  expandedSubjects.clear();
  
+ if(window.MorrowDB && window.MorrowDB.putMission){
+  window.MorrowDB.putMission(m, true);
+ }
  closeSubjectDeleteModal();
  save();
  render();
@@ -1303,9 +1380,16 @@ function confirmDeleteTopic(){
  const t = topics.find(x => x.id === id);
  if(!t) return;
  topics = topics.filter(x => x.id !== id);
+ window.topics = topics;
  closeTopicDeleteModal();
  save();
  render();
+ if(window.MorrowDB && window.MorrowDB.deleteTopic){
+  window.MorrowDB.deleteTopic(id, true);
+ }
+ if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
+  window.MorrowSync.scheduleSync();
+ }
  toast(`Deleted "${t.name}"`);
 }
 function addTopic(){
@@ -1317,19 +1401,39 @@ function addTopic(){
  if(!m.subjects.includes(subject)){
   m.subjects.push(subject);
   localStorage.setItem('morrowMissions',JSON.stringify(missions));
+  if(window.MorrowDB && window.MorrowDB.putMission){
+   window.MorrowDB.putMission(m, true);
+  }
  }
  const stage=document.getElementById('levelInput')?.value||'seed';
  const stageMap={seed:{days:1,lvl:0,icon:'🌱',label:'Seed'},sprout:{days:3,lvl:1,icon:'🌿',label:'Sprout'},sapling:{days:7,lvl:2,icon:'🌳',label:'Sapling'},budding:{days:15,lvl:3,icon:'🌸',label:'Budding'},evergreen:{days:30,lvl:4,icon:'🏔',label:'Evergreen'}};
  const info=stageMap[stage]||stageMap.seed;
  const newId=Date.now();
- topics.unshift({id:newId,name,subject,tone:'',done:false,graduated:false,paused:false,evergreenRevs:0,dueAt:todayStart()+info.days*DAY,level:info.lvl});
+ const newTopic = {id:newId,name,subject,tone:'',done:false,graduated:false,paused:false,evergreenRevs:0,dueAt:todayStart()+info.days*DAY,level:info.lvl,missionId:m.id};
+ topics.unshift(newTopic);
+ window.topics = topics;
  queueGardenAdd(newId);
- save();render();
+ save();
+ render();
+ if(window.MorrowDB && window.MorrowDB.putTopic){
+  window.MorrowDB.putTopic(newTopic, true);
+ }
+ if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
+  window.MorrowSync.scheduleSync();
+ }
  document.getElementById('topicInput').value='';document.getElementById('levelInput').value='seed';showView('today');toast(`${info.icon} ${info.label} planted · revisit in ${info.days} day${info.days===1?'':'s'}`);
 }
 function toast(msg){let el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2200)}
 loadMissionState(activeMissionId);
 render();
+
+if (window.MorrowDB && typeof window.MorrowDB.migrateFromLocalStorageIfNeeded === 'function') {
+ window.MorrowDB.migrateFromLocalStorageIfNeeded().then(() => {
+  if (typeof window.reloadAllStateFromStorage === 'function') {
+   window.reloadAllStateFromStorage();
+  }
+ }).catch(console.error);
+}
 const now = new Date();
 document.getElementById('dateLabel').textContent =
   now.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});
@@ -1451,8 +1555,11 @@ function getReminderSettings(){
 function saveReminderSettings(settings){
  try {
   localStorage.setItem(REMINDERS_KEY, JSON.stringify(settings));
-  if(window.MorrowSync && typeof window.MorrowSync.scheduleCloudSync === 'function'){
-   window.MorrowSync.scheduleCloudSync();
+  if(window.MorrowDB && window.MorrowDB.putSetting){
+   window.MorrowDB.putSetting('reminders', settings, true);
+  }
+  if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
+   window.MorrowSync.scheduleSync();
   }
  } catch(e){}
 }
@@ -1828,6 +1935,16 @@ function submitEditSubject(e){
  }
 
  localStorage.setItem('morrowMissions', JSON.stringify(missions));
+ if(window.MorrowDB && window.MorrowDB.putMission){
+  window.MorrowDB.putMission(m, true);
+ }
+ if(window.MorrowDB && window.MorrowDB.putTopic){
+  topics.forEach(t => {
+   if((t.subject || '').trim().toLowerCase() === newName.toLowerCase()){
+    window.MorrowDB.putTopic(t, true);
+   }
+  });
+ }
  closeSubjectEditModal();
  save();
  render();
@@ -1886,6 +2003,12 @@ function submitEditTopic(e){
  closeTopicEditModal();
  save();
  render();
+ if(window.MorrowDB && window.MorrowDB.putTopic){
+  window.MorrowDB.putTopic(t, true);
+ }
+ if(window.MorrowSync && typeof window.MorrowSync.scheduleSync === 'function'){
+  window.MorrowSync.scheduleSync();
+ }
  if(currentId === t.id && document.getElementById('review').classList.contains('active')){
   openTopic(t.id, false);
  }
@@ -1898,10 +2021,43 @@ function submitEditTopic(e){
 
 let activeAuthTab = 'signin';
 
-window.reloadAllStateFromStorage = function(){
- missions = JSON.parse(localStorage.getItem('morrowMissions') || 'null') || DEFAULT_MISSIONS;
+window.reloadAllStateFromStorage = async function(){
+ if (window.MorrowDB) {
+  try {
+   const dbMissions = await window.MorrowDB.getAllMissions();
+   if (dbMissions && dbMissions.length > 0) {
+    missions = dbMissions;
+    localStorage.setItem('morrowMissions', JSON.stringify(missions));
+   }
+   const dbActive = await window.MorrowDB.getSetting('active_mission');
+   if (dbActive && dbActive.value) {
+    activeMissionId = dbActive.value;
+    localStorage.setItem('morrowActiveMission', activeMissionId);
+   }
+   if (!missions.some(m => m.id === activeMissionId)) activeMissionId = (missions[0] && missions[0].id) || 'upsc';
+   const dbTopics = await window.MorrowDB.getAllTopics(activeMissionId);
+   if (dbTopics && dbTopics.length > 0) {
+    topics = dbTopics.map(t=>({...t,dueAt:t.dueAt||todayStart(),lastReviewed:t.lastReviewed||null,done:!!t.done,graduated:!!t.graduated,paused:!!t.paused,evergreenRevs:Number(t.evergreenRevs)||0,level:t.level||0}));
+    localStorage.setItem(missionStorageKey('topics', activeMissionId), JSON.stringify(topics));
+    window.topics = topics;
+   }
+   const dbDone = await window.MorrowDB.getSetting(`done_${activeMissionId}`);
+   if (dbDone && dbDone.value !== undefined) {
+    completed = Number(dbDone.value) || 0;
+    localStorage.setItem(missionStorageKey('done', activeMissionId), completed);
+   }
+  } catch(e) {
+   console.warn('MorrowDB reload fallback:', e);
+  }
+ }
+
+ if (!missions || !missions.length) {
+  missions = JSON.parse(localStorage.getItem('morrowMissions') || 'null') || DEFAULT_MISSIONS;
+ }
  activeMissionId = localStorage.getItem('morrowActiveMission') || 'upsc';
  if(!missions.some(m => m.id === activeMissionId)) activeMissionId = missions[0].id;
+ window.missions = missions;
+ window.activeMissionId = activeMissionId;
  loadMissionState(activeMissionId);
  render();
  syncMissionUI();
