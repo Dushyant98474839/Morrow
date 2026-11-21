@@ -247,6 +247,107 @@
   </div>
 </div>
 
+<!-- Account & Firebase Cloud Sync Modal -->
+<div class="auth-modal-backdrop" id="authModalBackdrop" onclick="closeAuthModal()"></div>
+<div class="auth-modal" id="authModal" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
+  <div class="mission-head">
+    <div>
+      <div class="eyebrow" id="authModalEyebrow" style="color:var(--sage-dark)">Sanctuary sync</div>
+      <h3 id="authModalTitle" style="font:500 20px/1.2 'Fraunces',serif;margin:4px 0 0">Account & Cloud</h3>
+    </div>
+    <button class="mission-close" type="button" aria-label="Close" onclick="closeAuthModal()">✕</button>
+  </div>
+
+  <div class="auth-status-bar">
+    <div class="auth-status-indicator">
+      <span class="sync-dot" id="modalSyncStatusDot" style="position:static;display:inline-block"></span>
+      <span id="syncStatusLabel">Checking sync status...</span>
+    </div>
+    <span class="auth-status-chip" id="authModalSyncBadge">Instant local</span>
+  </div>
+
+  <div id="authAlertBox" class="auth-error-alert"></div>
+
+  <!-- VIEW 1: Logged In -->
+  <div id="authLoggedInView" style="display:none">
+    <div class="auth-user-profile-card">
+      <div class="auth-profile-avatar-large" id="authProfileAvatar">🌿</div>
+      <div class="auth-profile-info">
+        <div class="auth-profile-name" id="authProfileName">Learner</div>
+        <div class="auth-profile-email" id="authProfileEmail">user@example.com</div>
+      </div>
+    </div>
+
+    <div class="auth-action-grid" style="grid-template-columns: repeat(3, 1fr);">
+      <button type="button" class="auth-action-btn" onclick="triggerManualSync()">
+        <span>🔄</span> Sync Now
+      </button>
+      <button type="button" class="auth-action-btn" onclick="triggerDataExport()">
+        <span>💾</span> Export
+      </button>
+      <button type="button" class="auth-action-btn" onclick="document.getElementById('authImportFileInput').click()">
+        <span>📂</span> Import
+      </button>
+    </div>
+    <input type="file" id="authImportFileInput" accept=".json" style="display:none" onchange="handleFileImport(event)" />
+
+    <div class="mission-create-actions" style="margin-top:14px">
+      <button type="button" onclick="closeAuthModal()">Done</button>
+      <button type="button" class="danger-m" onclick="handleSignOut()">Sign out</button>
+    </div>
+  </div>
+
+  <!-- VIEW 2: Logged Out -->
+  <div id="authLoggedOutView">
+    <p style="font-size:13px;color:var(--muted);margin:8px 0 14px;line-height:1.45">
+      Keep your revision rhythms, spaced intervals, and cascading hill gardens securely synced across your devices with zero lag.
+    </p>
+
+    <!-- Google Sign-In -->
+    <button type="button" class="google-auth-btn" onclick="handleGoogleSignIn()">
+      <svg class="google-icon-svg" viewBox="0 0 24 24">
+        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+      </svg>
+      Continue with Google
+    </button>
+
+    <div class="auth-divider">or with email</div>
+
+    <!-- Tabs: Sign In / Create Account -->
+    <div class="auth-tabs" role="tablist">
+      <button type="button" class="auth-tab active" id="authTabSignIn" onclick="switchAuthTab('signin')">Sign In</button>
+      <button type="button" class="auth-tab" id="authTabSignUp" onclick="switchAuthTab('signup')">Create Account</button>
+    </div>
+
+    <form id="authEmailForm" onsubmit="handleEmailAuthSubmit(event)">
+      <div class="auth-input-group" id="authDisplayNameGroup" style="display:none">
+        <label for="authDisplayNameInput">Your Name</label>
+        <input type="text" id="authDisplayNameInput" placeholder="e.g. Alex" maxlength="40" autocomplete="name" />
+      </div>
+
+      <div class="auth-input-group">
+        <label for="authEmailInput">Email address</label>
+        <input type="email" id="authEmailInput" placeholder="you@example.com" required autocomplete="email" />
+      </div>
+
+      <div class="auth-input-group">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <label for="authPasswordInput">Password</label>
+          <button type="button" id="authForgotPwdBtn" onclick="handleForgotPassword()" style="background:none;border:none;color:var(--sage-dark);font-size:11px;font-weight:600;cursor:pointer;padding:0;margin-bottom:5px">Forgot?</button>
+        </div>
+        <input type="password" id="authPasswordInput" placeholder="••••••••" required autocomplete="current-password" minlength="6" />
+      </div>
+
+      <button type="submit" class="primary" id="authSubmitBtn" style="margin-top:14px">Sign In</button>
+    </form>
+
+    <button type="button" class="auth-guest-link" onclick="handleContinueAsGuest()">Continue as Guest (Stay local)</button>
+  </div>
+</div>
+
 <div class="phone">
   <div class="botanical botanical-top" aria-hidden="true">
     <svg viewBox="0 0 220 190" role="presentation">
@@ -274,6 +375,10 @@
           <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
         </svg>
         <span class="reminder-dot" id="reminderStatusDot" aria-hidden="true"></span>
+      </button>
+      <button class="icon-btn account-btn" id="accountBtn" title="Account & Cloud Sync" aria-label="Account & Cloud Sync" onclick="openAuthModal()">
+        <span class="account-avatar-char" id="accountAvatarChar">👤</span>
+        <span class="sync-dot" id="syncStatusDot" aria-hidden="true"></span>
       </button>
       <button class="icon-btn" title="Add a topic or subject" onclick="showView('add')">＋</button>
     </div>
@@ -435,6 +540,19 @@
         </div>
         <span style="font-size:18px;color:var(--muted)">›</span>
       </div>
+
+      <div class="progress-reminder-card" onclick="openAuthModal()" style="margin-top:12px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="progress-reminder-icon-wrap" aria-hidden="true" style="background:#eaf2e8;color:#5c7857">
+            ☁️
+          </span>
+          <div>
+            <div style="font:600 13px 'DM Sans',sans-serif;color:var(--ink)" id="profileCardTitle">Cloud Sync & Account</div>
+            <div style="font-size:11.5px;color:var(--muted)" id="profileCardSub">Saved locally · Connect to Firebase</div>
+          </div>
+        </div>
+        <span style="font-size:18px;color:var(--muted)">›</span>
+      </div>
       <p class="footer-note">small returns add up.</p>
     </section>
   </main>
@@ -446,6 +564,11 @@
   </nav>
   <div class="toast" id="toast"></div>
 </div>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-sync.js"></script>
 <script src="app.js"></script>
 <script src="garden.js"></script>
 <script>

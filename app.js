@@ -222,6 +222,9 @@ function saveGardenQueues(){
  localStorage.setItem('morrowPendingGardenBlooms',JSON.stringify(pendingGardenBlooms));
  localStorage.setItem('morrowPendingGardenBiomes',JSON.stringify(pendingGardenBiomes));
  updateGardenNavBadge();
+ if(window.MorrowSync && typeof window.MorrowSync.scheduleCloudSync === 'function'){
+  window.MorrowSync.scheduleCloudSync();
+ }
 }
 
 function queueGardenAdd(topicId, mId=activeMissionId){
@@ -845,6 +848,9 @@ function createNewMission(e){
 function save(){
  localStorage.setItem(missionStorageKey('topics'),JSON.stringify(topics));
  localStorage.setItem(missionStorageKey('done'),completed);
+ if(window.MorrowSync && typeof window.MorrowSync.scheduleCloudSync === 'function'){
+  window.MorrowSync.scheduleCloudSync();
+ }
 }
 function dueState(t){
  const days=Math.floor((todayStart()-new Date(t.dueAt).setHours(0,0,0,0))/DAY);
@@ -1341,6 +1347,7 @@ function pushModalHistory(type){
 
 function hasAnyModalOpen(){
  return !!(
+  document.getElementById('authModal')?.classList.contains('open') ||
   document.getElementById('subjectEditModal')?.classList.contains('open') ||
   document.getElementById('topicEditModal')?.classList.contains('open') ||
   document.getElementById('remindersModal')?.classList.contains('open') ||
@@ -1355,6 +1362,7 @@ function hasAnyModalOpen(){
 }
 
 function closeAllModals(){
+ if(typeof closeAuthModal === 'function') closeAuthModal();
  if(typeof closeSubjectEditModal === 'function') closeSubjectEditModal();
  if(typeof closeTopicEditModal === 'function') closeTopicEditModal();
  if(typeof closeRemindersModal === 'function') closeRemindersModal();
@@ -1441,6 +1449,9 @@ function getReminderSettings(){
 function saveReminderSettings(settings){
  try {
   localStorage.setItem(REMINDERS_KEY, JSON.stringify(settings));
+  if(window.MorrowSync && typeof window.MorrowSync.scheduleCloudSync === 'function'){
+   window.MorrowSync.scheduleCloudSync();
+  }
  } catch(e){}
 }
 
@@ -1880,4 +1891,210 @@ function submitEditTopic(e){
   openTopic(t.id, false);
  }
  toast(`Updated topic "${newName}" ✿`);
+}
+
+/* ==========================================================================
+   Account Authorization & Firebase Cloud Sync UI Controller
+   ========================================================================== */
+
+let activeAuthTab = 'signin';
+
+window.reloadAllStateFromStorage = function(){
+ missions = JSON.parse(localStorage.getItem('morrowMissions') || 'null') || DEFAULT_MISSIONS;
+ activeMissionId = localStorage.getItem('morrowActiveMission') || 'upsc';
+ if(!missions.some(m => m.id === activeMissionId)) activeMissionId = missions[0].id;
+ loadMissionState(activeMissionId);
+ render();
+ syncMissionUI();
+ if(window.onGardenOpen) window.onGardenOpen();
+};
+
+function openAuthModal(){
+ const modal = document.getElementById('authModal');
+ const backdrop = document.getElementById('authModalBackdrop');
+ if(modal) modal.classList.add('open');
+ if(backdrop) backdrop.classList.add('open');
+ pushModalHistory('modal');
+ clearAuthAlert();
+}
+
+function closeAuthModal(){
+ document.getElementById('authModal')?.classList.remove('open');
+ document.getElementById('authModalBackdrop')?.classList.remove('open');
+ clearAuthAlert();
+}
+
+function switchAuthTab(tab){
+ activeAuthTab = tab;
+ const btnIn = document.getElementById('authTabSignIn');
+ const btnUp = document.getElementById('authTabSignUp');
+ const nameGroup = document.getElementById('authDisplayNameGroup');
+ const submitBtn = document.getElementById('authSubmitBtn');
+ const forgotBtn = document.getElementById('authForgotPwdBtn');
+
+ if(tab === 'signup'){
+   btnUp?.classList.add('active');
+   btnIn?.classList.remove('active');
+   if(nameGroup) nameGroup.style.display = 'block';
+   if(submitBtn) submitBtn.textContent = 'Create Account';
+   if(forgotBtn) forgotBtn.style.display = 'none';
+ } else {
+   btnIn?.classList.add('active');
+   btnUp?.classList.remove('active');
+   if(nameGroup) nameGroup.style.display = 'none';
+   if(submitBtn) submitBtn.textContent = 'Sign In';
+   if(forgotBtn) forgotBtn.style.display = 'inline-block';
+ }
+ clearAuthAlert();
+}
+
+function setAuthAlert(msg, isSuccess = false){
+ const box = document.getElementById('authAlertBox');
+ if(!box) return;
+ box.textContent = msg;
+ box.style.display = 'block';
+ if(isSuccess){
+   box.style.background = '#edf3e9';
+   box.style.borderColor = '#c6dac0';
+   box.style.color = '#3e6336';
+ } else {
+   box.style.background = '#fbeee8';
+   box.style.borderColor = '#ebd0c4';
+   box.style.color = '#a84832';
+ }
+}
+
+function clearAuthAlert(){
+ const box = document.getElementById('authAlertBox');
+ if(box) {
+   box.style.display = 'none';
+   box.textContent = '';
+ }
+}
+
+async function handleGoogleSignIn(){
+ clearAuthAlert();
+ if(!window.MorrowSync){
+   setAuthAlert('Firebase module loading... Please check connection.');
+   return;
+ }
+ try {
+   toast('Connecting to Google...');
+   await window.MorrowSync.signInWithGoogle();
+   toast('Signed in with Google ✿');
+   closeAuthModal();
+ } catch(err){
+   console.error(err);
+   let msg = err.message || 'Google sign-in failed';
+   if(err.code === 'auth/popup-closed-by-user') msg = 'Sign-in window closed';
+   if(err.code === 'auth/configuration-not-found' || !window.MorrowSync.isConfigured()) {
+     msg = 'Please enter your Firebase config below in "Configure Firebase Project" first.';
+   }
+   setAuthAlert(msg);
+ }
+}
+
+async function handleEmailAuthSubmit(e){
+ if(e) e.preventDefault();
+ clearAuthAlert();
+ if(!window.MorrowSync){
+   setAuthAlert('Firebase module loading... Please check connection.');
+   return;
+ }
+
+ const email = (document.getElementById('authEmailInput')?.value || '').trim();
+ const password = document.getElementById('authPasswordInput')?.value || '';
+ const displayName = (document.getElementById('authDisplayNameInput')?.value || '').trim();
+
+ if(!email || !password){
+   setAuthAlert('Please enter both email and password.');
+   return;
+ }
+
+ const submitBtn = document.getElementById('authSubmitBtn');
+ if(submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Please wait...'; }
+
+ try {
+   if(activeAuthTab === 'signup'){
+     await window.MorrowSync.signUpWithEmail(email, password, displayName);
+     toast('Account created & synced ✿');
+   } else {
+     await window.MorrowSync.signInWithEmail(email, password);
+     toast('Welcome back ✿');
+   }
+   closeAuthModal();
+ } catch(err){
+   console.error(err);
+   let msg = err.message || 'Authentication failed';
+   if(err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+     msg = 'Invalid email or password.';
+   } else if(err.code === 'auth/email-already-in-use') {
+     msg = 'An account with this email already exists.';
+   } else if(err.code === 'auth/weak-password') {
+     msg = 'Password should be at least 6 characters.';
+   } else if(!window.MorrowSync.isConfigured()) {
+     msg = 'Please configure your Firebase credentials below to enable cloud accounts.';
+   }
+   setAuthAlert(msg);
+ } finally {
+   if(submitBtn) {
+     submitBtn.disabled = false;
+     submitBtn.textContent = activeAuthTab === 'signup' ? 'Create Account' : 'Sign In';
+   }
+ }
+}
+
+async function handleForgotPassword(){
+ const email = (document.getElementById('authEmailInput')?.value || '').trim();
+ if(!email){
+   setAuthAlert('Please enter your email address above, then click Forgot.');
+   return;
+ }
+ try {
+   await window.MorrowSync.sendPasswordReset(email);
+   setAuthAlert(`Password reset link sent to ${email} ✿`, true);
+ } catch(err){
+   setAuthAlert(err.message || 'Could not send reset email.');
+ }
+}
+
+async function handleSignOut(){
+ if(confirm('Sign out of your cloud account? Your local topics and garden progress will remain intact.')){
+   if(window.MorrowSync) await window.MorrowSync.signOut();
+   toast('Signed out · Local mode active');
+   closeAuthModal();
+ }
+}
+
+function handleContinueAsGuest(){
+ closeAuthModal();
+ toast('Continuing in instant local mode ✿');
+}
+
+function triggerManualSync(){
+ toast('Syncing with cloud...');
+ if(window.MorrowSync) {
+   window.MorrowSync.scheduleCloudSync(true);
+   setTimeout(() => toast('Sync check complete ✿'), 800);
+ }
+}
+
+function triggerDataExport(){
+ if(window.MorrowSync) {
+   window.MorrowSync.exportData();
+   toast('Downloaded backup JSON ✿');
+ }
+}
+
+async function handleFileImport(e){
+ const file = e.target?.files?.[0];
+ if(!file || !window.MorrowSync) return;
+ try {
+   await window.MorrowSync.importData(file);
+   toast('Backup restored successfully ✿');
+   closeAuthModal();
+ } catch(err){
+   alert('Failed to import backup file: ' + err.message);
+ }
+ e.target.value = '';
 }
