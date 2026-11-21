@@ -208,6 +208,7 @@ let completed=0;
 let currentId=null;
 const expandedSubjects = new Set();
 const expandedTopics = new Set();
+var inMemoryReminders = null;
 
 let pendingGardenAdds={};
 let pendingGardenBlooms={};
@@ -1537,7 +1538,6 @@ try {
 
 
 /* Daily Notification Reminders (Morning & Night) */
-let inMemoryReminders = null;
 
 function getReminderSettings(){
  const fallback = {
@@ -2270,3 +2270,22 @@ async function handleFileImport(e){
  }
  e.target.value = '';
 }
+
+window.openSettingsModal = openSettingsModal;
+window.closeSettingsModal = closeSettingsModal;
+window.switchSettingsTab = switchSettingsTab;
+window.switchAuthTab = switchAuthTab;
+window.handleGoogleSignIn = handleGoogleSignIn;
+window.handleEmailAuthSubmit = handleEmailAuthSubmit;
+window.handleForgotPassword = handleForgotPassword;
+window.handleSignOut = handleSignOut;
+window.triggerManualSync = triggerManualSync;
+window.triggerDataExport = triggerDataExport;
+window.handleFileImport = handleFileImport;
+
+// On startup on any device: if user is not authenticated, prompt sign-in / registration
+setTimeout(() => {
+  if (!window.FirebaseCloud || !window.FirebaseCloud.user) {
+    openSettingsModal('account');
+  }
+}, 60);

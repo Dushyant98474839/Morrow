@@ -417,8 +417,14 @@
       if (authLoggedOutView) authLoggedOutView.style.display = 'none';
 
       // Auto close the auth gate on successful login
-      if (typeof closeSettingsModal === 'function') {
-        closeSettingsModal(true);
+      if (typeof window.closeSettingsModal === 'function') {
+        window.closeSettingsModal(true);
+      } else {
+        setTimeout(() => {
+          if (typeof window.closeSettingsModal === 'function') {
+            window.closeSettingsModal(true);
+          }
+        }, 80);
       }
     } else {
       if (avatarChar) avatarChar.textContent = '👤';
@@ -434,8 +440,14 @@
       if (authLoggedOutView) authLoggedOutView.style.display = 'block';
 
       // Auto open modal on startup if unauthenticated
-      if (typeof openSettingsModal === 'function') {
-        openSettingsModal('account');
+      if (typeof window.openSettingsModal === 'function') {
+        window.openSettingsModal('account');
+      } else {
+        setTimeout(() => {
+          if (typeof window.openSettingsModal === 'function') {
+            window.openSettingsModal('account');
+          }
+        }, 80);
       }
     }
   }
