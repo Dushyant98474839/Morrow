@@ -901,6 +901,7 @@ function render(){
  document.getElementById('doneStat').textContent=completed;
  renderGarden();
  updateReminderUI();
+ updateGreetingHeader();
 }
 
 function dateValue(ts){
@@ -1087,6 +1088,21 @@ function currentViewId(){
  return document.querySelector('.view.active')?.id || 'today';
 }
 
+function getDaytimeGreeting(){
+ const hour = new Date().getHours();
+ if(hour >= 4 && hour < 12) return 'Good morning.';
+ if(hour >= 12 && hour < 17) return 'Good afternoon.';
+ if(hour >= 17 && hour < 22) return 'Good evening.';
+ return 'Good night.';
+}
+
+function updateGreetingHeader(){
+ const titleEl = document.getElementById('pageTitle');
+ if(titleEl && currentViewId() === 'today'){
+  titleEl.textContent = getDaytimeGreeting();
+ }
+}
+
 function handleReviewBack(){
  if(history.state && history.state.view === 'review'){
   history.back();
@@ -1122,7 +1138,7 @@ function showView(id,btn,push=true){
  else if(id==='library')document.querySelectorAll('.nav')[2]?.classList.add('active');
  const topEl=document.querySelector('.top');
  if(topEl) topEl.style.display=(id==='today')?'flex':'none';
- const titles={today:'Good morning.',add:'Leave it here.',garden:'Your garden.',library:'All topics.',progress:'Look how far.'};
+ const titles={today:getDaytimeGreeting(),add:'Leave it here.',garden:'Your garden.',library:'All topics.',progress:'Look how far.'};
  if(id==='today')document.getElementById('pageTitle').textContent=titles[id]||'';
 }
 function openTopic(id,push=true){currentId=id;let t=topics.find(x=>x.id===id);if(!t)return;
@@ -1444,6 +1460,7 @@ render();
 const now = new Date();
 document.getElementById('dateLabel').textContent =
   now.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});
+updateGreetingHeader();
 
 
 /* Mobile Native Back Button Navigation & History Routing */
